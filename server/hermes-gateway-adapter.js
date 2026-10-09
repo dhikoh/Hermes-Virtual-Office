@@ -36,8 +36,13 @@ const {
   saveResearchToVault,
   isCamoufoxAvailable,
   listAgentProfiles,
-  getAgentProfileDir,
 } = require("./research/browser-service");
+const {
+  createBrainArchive,
+  restoreBrainArchive,
+  getBrainStatus,
+  unpackTarGz,
+} = require("./system/brain-manager");
 
 function loadDotenvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -1535,6 +1540,32 @@ async function handleMethod(method, params, id, sendEvent) {
       }
     }
 
+    // --- Brain Migration & State (Option 1) ----------------------------------
+
+    case "brain.status": {
+      return resOk(id, { ok: true, status: getBrainStatus(process.cwd()) });
+    }
+
+    case "brain.export": {
+      try {
+        const result = createBrainArchive(process.cwd());
+        return resOk(id, { ok: true, archive: result });
+      } catch (err) {
+        return resErr(id, "brain_export_failed", err.message);
+      }
+    }
+
+    case "brain.import": {
+      const archivePath = typeof p.archivePath === "string" ? p.archivePath : "";
+      if (!archivePath) return resErr(id, "missing_param", "archivePath is required");
+      try {
+        const result = restoreBrainArchive(archivePath, process.cwd());
+        return resOk(id, { ok: true, restored: result });
+      } catch (err) {
+        return resErr(id, "brain_import_failed", err.message);
+      }
+    }
+
     // --- Status & heartbeat -------------------------------------------------
 
     case "status": {
@@ -1793,6 +1824,45 @@ function startAdapter() {
         })
       );
     }
+    if (parsedUrl.pathname === "/api/system/brain/status") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ ok: true, status: getBrainStatus(process.cwd()) }));
+    }
+    if (parsedUrl.pathname === "/api/system/brain/export") {
+      try {
+        const result = createBrainArchive(process.cwd());
+        const data = fs.readFileSync(result.archivePath);
+        res.writeHead(200, {
+          "Content-Type": "application/gzip",
+          "Content-Disposition": `attachment; filename="${path.basename(result.archivePath)}"`,
+          "Content-Length": data.length,
+        });
+        return res.end(data);
+      } catch (err) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ ok: false, error: err.message }));
+      }
+    }
+    if (parsedUrl.pathname === "/api/system/brain/import" && req.method === "POST") {
+      const chunks = [];
+      req.on("data", (chunk) => chunks.push(chunk));
+      req.on("end", () => {
+        try {
+          const bodyBuffer = Buffer.concat(chunks);
+          if (bodyBuffer.length === 0) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            return res.end(JSON.stringify({ ok: false, error: "Empty archive payload" }));
+          }
+          const restored = unpackTarGz(bodyBuffer, process.cwd());
+          res.writeHead(200, { "Content-Type": "application/json" });
+          return res.end(JSON.stringify({ ok: true, fileCount: restored.length }));
+        } catch (err) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          return res.end(JSON.stringify({ ok: false, error: err.message }));
+        }
+      });
+      return;
+    }
     res.writeHead(200, { "Content-Type": "text/plain" });
     res.end("Hermes Gateway Adapter – OK\n");
   });
@@ -1846,6 +1916,7 @@ function startAdapter() {
               "exec.approvals.get","exec.approvals.set","exec.approval.resolve",
               "workspace.snapshots.list","workspace.rollback","vault.documents.list","roles.matrix.get",
               "browser.status","browser.profiles.list","browser.navigate",
+              "brain.status","brain.export","brain.import",
               "wake","skills.status","models.list",
               "tasks.list",
               "cron.list","cron.add","cron.remove","cron.patch","cron.run"],

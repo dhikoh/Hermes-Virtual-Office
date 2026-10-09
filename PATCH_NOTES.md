@@ -1,5 +1,22 @@
 # Hermes3D Patch Notes
 
+## Patch v1.0.7 - Hermes Virtual Office Ecosystem & 1-Click Brain Migration Engine
+- **Feature (1-Click Brain Migration Engine - Option 1)**: Implemented `server/system/brain-manager.js` using streaming POSIX/GNU TAR + GZIP (`.tar.gz`) in pure Node.js (zero external dependencies). Backs up and restores the complete AI brain: knowledge notes (`_AI/`), chat history and Kanban tasks (`.hermes/`), persistent Camoufox browser profiles and cookies (`_AI/browser-profiles/`), and core memory files (`MEMORY.md`, `USER.md`, `SOUL.md`, `IDENTITY.md`, `api_providers.json`).
+- **Feature (CLI Migration Commands & REST Endpoints)**: Added `npm run brain:export` (`scripts/brain-export.mjs`) and `npm run brain:import` (`scripts/brain-import.mjs`) for 1-click VPS migration. Integrated HTTP routes (`GET /api/system/brain/status`, `GET /api/system/brain/export`, `POST /api/system/brain/import`) and gateway RPC methods (`brain.status`, `brain.export`, `brain.import`) into `server/hermes-gateway-adapter.js`.
+- **Feature (Security Anti-Traversal Guard)**: Archive unpacker strictly validates entry paths, blocking malicious path traversal attacks (`../`) and absolute paths.
+- **Feature (Packaged Skills - Hermes Virtual Office Ecosystem)**: Integrated 8 standardized packaged skills into `assets/skills/`, `src/lib/skills/packaged.ts`, and `src/lib/skills/catalog.ts`:
+  1. `caveman`: High-signal, token-efficient compression mode for mobile/Telegram (saves 30-75% tokens).
+  2. `telegram-remote`: Remote task card formatting, status badges (`[WORKING]`, `[BLOCKED]`, `[DONE]`), and mobile commands.
+  3. `web-research`: Camoufox stealth web intelligence SOP and structured extraction to `_AI/research/`.
+  4. `agent-reach`: Social media intelligence playbook for Twitter/X, Reddit, and LinkedIn via persistent Camoufox profiles.
+  5. `obsidian-skills`: Knowledge base management enforcing Obsidian `[[wikilinks]]`, callouts, YAML frontmatter, and JSON `.canvas` diagrams under `_AI/`.
+  6. `superpowers`: Strict software engineering rules: planning before coding, mandatory TDD, and multi-gate verification before commit.
+  7. `humanizer`: Anti-AI slop filter eliminating robotic AI tropes and buzzwords for authentic human-sounding prose.
+  8. `marketing-skills`: Conversion rate optimization (CRO), landing page audits, value proposition frameworks, and SEO checklists.
+- **Feature (Master SOUL Template)**: Created `assets/personality/SOUL.md` defining Core Truths (empirical skepticism, anti-hallucination), Boundaries (credential/env safety), Vibe (pragmatic, calm, zero-fluff), and Continuity (`MEMORY.md` updates).
+- **Docker & Coolify Deployment Assurance**: Updated `Dockerfile` runner stage to copy `assets/` and `scripts/` directories, ensuring physical skill assets and CLI migration scripts are pre-packaged on Coolify container startup.
+- **Comprehensive Automated Testing**: Added `tests/unit/brainMigration.test.ts` (100% integrity across nested directories, long filenames >100 characters via GNU @LongLink, and path traversal rejection) and verified 100% character-by-character sync in `tests/unit/packagedSkills.test.ts` across all 11 cataloged skills. All 44 unit tests passed cleanly with Vitest; 0 TypeScript errors (`tsc --noEmit`), 0 ESLint errors.
+
 ## Patch v1.0.6 - Camoufox Anti-Detect Browser & VPS / Coolify Headless Infrastructure
 - **Feature (Camoufox Anti-Detect Stealth Engine)**: Integrated official `camoufox` (`v0.5.8`) and `playwright-core` into `server/research/browser-service.js`. Provides automated browser fingerprint randomization, WebGL/canvas spoofing, and Cloudflare/bot mitigation designed specifically for AI agent web navigation without bot detection.
 - **Feature (Persistent Browser Profile Isolation per Agent)**: Implemented `getAgentProfileDir(agentId)` and `listAgentProfiles()`. Each agent and sub-agent maintains its own persistent profile (`_AI/browser-profiles/<agentId>`) via Playwright's `userDataDir`. Allows operators to assist with manual logins and session cookie retention, enabling autonomous persistent access for agents over time.

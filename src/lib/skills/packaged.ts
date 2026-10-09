@@ -453,6 +453,439 @@ soundhermes.previous(): void
 6. Agent reports back what was played or linked
 `;
 
+const CAVEMAN_SKILL_MD = `---
+name: caveman
+description: Compress agent responses into dense, high-signal, punchy language without filler or pleasantries. Saves 30-75% tokens and is optimized for Telegram and mobile interfaces.
+metadata: {"hermes":{"skillKey":"caveman"}}
+---
+
+# Caveman Compression Mode
+
+Use this skill when responding over mobile channels, Telegram, or when the user requests concise, high-signal responses.
+
+## Trigger
+
+\`\`\`json
+{
+  "activation": {
+    "anyPhrases": [
+      "caveman",
+      "be concise",
+      "singkat padat",
+      "hemat token",
+      "mobile response",
+      "no fluff"
+    ]
+  },
+  "movement": {
+    "target": "desk",
+    "skipIfAlreadyThere": true
+  }
+}
+\`\`\`
+
+## Core Rules
+
+1. **Zero Conversational Filler**:
+   - Ban pleasantries: "Certainly!", "Sure thing!", "I would be happy to help", "As an AI model...".
+   - Ban meta-commentary: "Here is what you requested:", "In summary:", "I hope this helps!".
+
+2. **Direct Data Points**:
+   - Start immediately with the answer, status, or key action.
+   - Use bullet points (\`-\`) or key-value pairs (\`Key: Value\`) for multiple items.
+   - Strip adjectives and flowery prose.
+
+3. **Status Badges**:
+   - Completed: \`[DONE]\`
+   - Working/In Progress: \`[PROGRESS]\`
+   - Blocked/Approval: \`[WAITING: reason]\`
+   - Failed: \`[FAIL: error]\`
+
+4. **Example Transformation**:
+   - *AI Slop*: "I have successfully analyzed the three competitor websites you mentioned and gathered all relevant pricing data for your review. Below is a detailed breakdown..."
+   - *Caveman*: "[DONE] 3 competitors analyzed.\\n- Site A: $19/mo (solo)\\n- Site B: $49/mo (team)\\n- Site C: Free tier + custom enterprise\\nReport saved to vault: _AI/research/competitor-pricing.md"
+`;
+
+const TELEGRAM_REMOTE_SKILL_MD = `---
+name: telegram-remote
+description: Format remote task updates, notifications, and approval cards for Telegram and mobile interfaces. Handles remote commands and compact actionable reports.
+metadata: {"hermes":{"skillKey":"telegram-remote"}}
+---
+
+# Telegram Remote Control & Mobile Card Formatting
+
+Use this skill when interacting through Telegram bots, mobile webhook channels, or remote status notifications.
+
+## Trigger
+
+\`\`\`json
+{
+  "activation": {
+    "anyPhrases": [
+      "telegram",
+      "mobile update",
+      "kirim ke telegram",
+      "status hp",
+      "remote task",
+      "mobile card"
+    ]
+  },
+  "movement": {
+    "target": "desk",
+    "skipIfAlreadyThere": true
+  }
+}
+\`\`\`
+
+## Mobile Card Format
+
+When sending updates to Telegram or mobile:
+
+1. **Card Header**:
+   - \`[HERMES REMOTE]\` - \`[AGENT_NAME]\`
+   - \`Status\`: \`WORKING\` | \`BLOCKED\` | \`DONE\` | \`APPROVAL_REQUIRED\`
+
+2. **Card Body**:
+   - **Task**: 1-line statement of the active goal.
+   - **Progress**: Concise checkpoint or percentage (e.g. \`Step 2/4\`).
+   - **Details**: Max 3 bullet points of high-level information.
+
+3. **Card Footer / Action**:
+   - If blocked on human approval, state the command and provide quick action tags:
+     \`Approve: /approve <id> | Reject: /reject <id>\`
+
+4. **Tone & Constraints**:
+   - Keep messages under 300 characters when possible.
+   - Use standard emoji sparingly as functional signifiers (✅ done, ⚠️ attention, ⏳ in-flight).
+   - Never print raw stack traces; print 1-line sanitized error message instead.
+`;
+
+const WEB_RESEARCH_SKILL_MD = `---
+name: web-research
+description: Perform stealth web research, data extraction, and competitive intelligence using Camoufox anti-detect browser. Automatically stores findings to the Obsidian knowledge vault at _AI/research/.
+metadata: {"hermes":{"skillKey":"web-research"}}
+---
+
+# Web Research & Camoufox Intelligence SOP
+
+Use this skill when researching external URLs, analyzing competitor offerings, reading online documentation, or verifying external claims.
+
+## Trigger
+
+\`\`\`json
+{
+  "activation": {
+    "anyPhrases": [
+      "research",
+      "browse web",
+      "scrape url",
+      "analisis website",
+      "cari informasi",
+      "inspect page"
+    ]
+  },
+  "movement": {
+    "target": "desk",
+    "skipIfAlreadyThere": true
+  }
+}
+\`\`\`
+
+## Operating Protocol
+
+1. **Anti-Detect Browsing**:
+   - Utilize Camoufox persistent agent profiles (\`_AI/browser-profiles/<agentId>\`) to prevent Cloudflare Turnstile blocks and bot fingerprinting.
+   - Run requests with \`saveToVault: true\` to archive raw markdown snapshots.
+
+2. **Extraction Discipline**:
+   - Extract primary headings, value propositions, key technical specifications, and pricing tiers.
+   - Strip navigation headers, cookie banners, tracking scripts, and footer clutter.
+
+3. **Obsidian Vault Archival**:
+   - Save the finalized research report in \`_AI/research/<date>-<topic-slug>.md\`.
+   - Include standard YAML frontmatter:
+     \`\`\`yaml
+     ---
+     title: "Research Topic"
+     source: "https://example.com"
+     agent: "researcher"
+     date: "YYYY-MM-DD"
+     tags: ["research", "intel"]
+     ---
+     \`\`\`
+   - Connect related entities using \`[[wikilinks]]\`.
+
+4. **Verification Gate**:
+   - Compare extracted claims with existing workspace documentation.
+   - Highlight any discrepancies or uncertainties before reporting to the user.
+`;
+
+const AGENT_REACH_SKILL_MD = `---
+name: agent-reach
+description: Social media intel and public community extraction playbook for Twitter/X, Reddit, and LinkedIn. Uses Camoufox persistent browser profiles to retain logins and prevent bot detection.
+metadata: {"hermes":{"skillKey":"agent-reach"}}
+---
+
+# Agent Reach: Social Intelligence & Community Monitoring
+
+Use this skill when monitoring community sentiment, competitor announcements, trending topics, or public discussions on Twitter/X, Reddit, or LinkedIn.
+
+## Trigger
+
+\`\`\`json
+{
+  "activation": {
+    "anyPhrases": [
+      "agent reach",
+      "pantau sosmed",
+      "social media research",
+      "scrape twitter",
+      "scrape reddit",
+      "scrape linkedin",
+      "community sentiment"
+    ]
+  },
+  "movement": {
+    "target": "desk",
+    "skipIfAlreadyThere": true
+  }
+}
+\`\`\`
+
+## Platform Playbooks
+
+1. **Twitter / X Public Intelligence**:
+   - Navigate target profiles or search queries via persistent Camoufox profile to maintain session auth.
+   - Extract top thread metrics: Views, Retweets, Likes, and dominant audience sentiment.
+   - Ignore promoted ads, sponsored spam, and unrelated bot replies.
+
+2. **Reddit Community Discussions**:
+   - Focus on discussion subreddits (\`r/programming\`, \`r/selfhosted\`, \`r/MachineLearning\`, etc.).
+   - Extract upvoted pain points, feature requests, and authentic developer reviews.
+
+3. **LinkedIn Public Posts**:
+   - Extract industry trends, hiring signals, and partner announcements.
+
+4. **Storage & Output**:
+   - Save dossiers to \`_AI/research/social/<platform>-<topic-slug>.md\`.
+   - Provide concise synthesis: Key takeaway, Community sentiment ratio (Positive/Neutral/Negative), and Direct Quotes.
+`;
+
+const OBSIDIAN_SKILLS_SKILL_MD = `---
+name: obsidian-skills
+description: Structure and maintain the workspace knowledge base as a connected Obsidian Vault. Enforces [[wikilinks]], callouts, frontmatter tags, and canvas diagrams under _AI/.
+metadata: {"hermes":{"skillKey":"obsidian-skills"}}
+---
+
+# Obsidian Vault Architecture & Knowledge Management
+
+Use this skill when reading, creating, or updating notes in the \`_AI/\` directory to ensure full compatibility with Obsidian.
+
+## Trigger
+
+\`\`\`json
+{
+  "activation": {
+    "anyPhrases": [
+      "obsidian",
+      "vault",
+      "wikilink",
+      "knowledge graph",
+      "catat di vault",
+      "buat canvas"
+    ]
+  },
+  "movement": {
+    "target": "desk",
+    "skipIfAlreadyThere": true
+  }
+}
+\`\`\`
+
+## Vault Taxonomy
+
+Organize files according to the three-tier office knowledge structure:
+
+- \`_AI/research/\`: External scraping reports, competitor breakdowns, market intel.
+- \`_AI/plans/\`: Implementation plans, architecture roadmaps, technical specs.
+- \`_AI/adr/\`: Architecture Decision Records (immutable records of why a technical choice was made).
+
+## Note Formatting Standards
+
+1. **YAML Frontmatter**:
+   \`\`\`yaml
+   ---
+   title: "Note Title"
+   aliases: ["Alternative Name"]
+   tags: ["category/subtag"]
+   created: "YYYY-MM-DD"
+   updated: "YYYY-MM-DD"
+   ---
+   \`\`\`
+
+2. **Wikilinks**:
+   - Link related concepts with double square brackets: \`[[Note Name]]\` or \`[[Note Name|Display Label]]\`.
+   - Never use relative markdown paths like \`[Note](../research/note.md)\` when a \`[[wikilink]]\` is appropriate.
+
+3. **Callout Boxes**:
+   - Use standard Obsidian callout syntax:
+     \`\`\`markdown
+     > [!NOTE]
+     > Key insight or contextual information.
+     \`\`\`
+     Supported callouts: \`[!NOTE]\`, \`[!TIP]\`, \`[!IMPORTANT]\`, \`[!WARNING]\`, \`[!CAUTION]\`.
+
+4. **JSON Canvas (.canvas)**:
+   - Mind maps and workflow state transitions should be saved as valid \`.canvas\` JSON files containing \`nodes\` and \`edges\`.
+`;
+
+const SUPERPOWERS_SKILL_MD = `---
+name: superpowers
+description: Enforce rigorous software engineering discipline: requirement planning before coding, test-driven development (TDD), and multi-gate verification before commit.
+metadata: {"hermes":{"skillKey":"superpowers"}}
+---
+
+# Superpowers: Rigorous Software Engineering Discipline
+
+Use this skill when developing code, debugging issues, modifying architectures, or creating software features.
+
+## Trigger
+
+\`\`\`json
+{
+  "activation": {
+    "anyPhrases": [
+      "superpowers",
+      "engineering plan",
+      "tdd",
+      "strict mode",
+      "verifikasi kode",
+      "quality gate"
+    ]
+  },
+  "movement": {
+    "target": "desk",
+    "skipIfAlreadyThere": true
+  }
+}
+\`\`\`
+
+## Non-Negotiable Engineering Rules
+
+1. **No Coding Without a Plan**:
+   - Write or update an implementation plan (\`_AI/plans/\`) before touching source code.
+   - Clarify edge cases, dependencies, and rollback mechanisms beforehand.
+
+2. **Test-Driven Discipline (TDD)**:
+   - When introducing or altering functionality, write or update automated unit/integration tests first.
+   - Run tests to prove failure on old code and success on new code.
+
+3. **Zero-Error Verification Gate**:
+   - Before completing any task or staging Git commits, verify:
+     - Typecheck: \`npx tsc --noEmit\` (must exit with 0 errors).
+     - Linter: \`npx eslint\` (must exit with 0 warnings/errors).
+     - Test suite: \`npx vitest run\` (all tests must pass).
+
+4. **No Code Bloat / Duplication**:
+   - Always reuse existing utility functions rather than duplicating logic.
+   - Remove dead code, obsolete imports, and temporary debug statements.
+`;
+
+const HUMANIZER_SKILL_MD = `---
+name: humanizer
+description: Filter out repetitive AI patterns, robotic phrasing, and overused buzzwords. Rewrites text into engaging, authentic, human-sounding content.
+metadata: {"hermes":{"skillKey":"humanizer"}}
+---
+
+# Humanizer: Anti-AI Slop & Authentic Writing Filter
+
+Use this skill when composing documentation, articles, marketing copy, patch notes, or customer-facing communications.
+
+## Trigger
+
+\`\`\`json
+{
+  "activation": {
+    "anyPhrases": [
+      "humanize",
+      "humanizer",
+      "hapus gaya ai",
+      "tulis seperti manusia",
+      "natural writing",
+      "anti slop"
+    ]
+  },
+  "movement": {
+    "target": "desk",
+    "skipIfAlreadyThere": true
+  }
+}
+\`\`\`
+
+## Banned AI Tropes & Patterns
+
+1. **Banned Words & Buzzwords**:
+   - Do NOT use: "delve", "tapestry", "beacon", "testament to", "furthermore", "in conclusion", "it is crucial to remember", "embark on", "foster", "nuanced", "multifaceted".
+
+2. **Banned Sentence Structures**:
+   - Avoid excessive triads ("fast, reliable, and secure").
+   - Avoid rhetorical summary intros ("In a world where...", "When it comes to...").
+   - Avoid passive voice hedge phrases ("It could be argued that...").
+
+3. **Human Phrasing Standards**:
+   - Vary sentence lengths dramatically. Mix very short sentences with longer explanatory ones.
+   - Use concrete nouns and active verbs.
+   - Speak with opinionated clarity, pragmatic realism, and grounded experience.
+`;
+
+const MARKETING_SKILLS_SKILL_MD = `---
+name: marketing-skills
+description: Conversion rate optimization (CRO), landing page analysis, SEO on-page checklist, and persuasive value proposition copywriting.
+metadata: {"hermes":{"skillKey":"marketing-skills"}}
+---
+
+# Marketing Skills: CRO, SEO & Value Proposition Architecture
+
+Use this skill when auditing product pages, drafting website copy, optimizing conversion funnels, or structuring SEO metadata.
+
+## Trigger
+
+\`\`\`json
+{
+  "activation": {
+    "anyPhrases": [
+      "marketing",
+      "cro audit",
+      "landing page audit",
+      "copywriting",
+      "value proposition",
+      "seo checklist",
+      "conversion optimization"
+    ]
+  },
+  "movement": {
+    "target": "desk",
+    "skipIfAlreadyThere": true
+  }
+}
+\`\`\`
+
+## CRO & Landing Page Audit Checklist
+
+1. **Above-the-Fold Clarity (5-Second Rule)**:
+   - Does the visitor immediately understand: (a) What this is, (b) Who it is for, and (c) What the primary outcome is?
+   - Hero Formula: Clear benefit headline + 1-sentence supporting subhead + Single prominent Call to Action (CTA).
+
+2. **Copywriting Frameworks**:
+   - **PAS (Problem-Agitate-Solution)**: Name the acute pain point, show the real cost of ignoring it, present the product as the direct relief.
+   - **AIDA (Attention, Interest, Desire, Action)**: Hook attention with concrete metrics, sustain interest with mechanics, build desire with social proof, call to decisive action.
+
+3. **SEO On-Page Essentials**:
+   - Title Tag: Primary Keyword + Core Benefit (under 60 characters).
+   - Meta Description: Compelling summary with CTA (under 155 characters).
+   - Heading Hierarchy: Exact single \`<h1>\`, logical \`<h2>\` topic clusters, descriptive alt text for all images.
+`;
+
 const PACKAGED_SKILL_FILES: Record<string, PackagedSkillFile[]> = {
   "todo-board": [
     {
@@ -478,6 +911,54 @@ const PACKAGED_SKILL_FILES: Record<string, PackagedSkillFile[]> = {
     {
       relativePath: "SKILL.md",
       content: SOUNDHERMES_SKILL_MD,
+    },
+  ],
+  caveman: [
+    {
+      relativePath: "SKILL.md",
+      content: CAVEMAN_SKILL_MD,
+    },
+  ],
+  "telegram-remote": [
+    {
+      relativePath: "SKILL.md",
+      content: TELEGRAM_REMOTE_SKILL_MD,
+    },
+  ],
+  "web-research": [
+    {
+      relativePath: "SKILL.md",
+      content: WEB_RESEARCH_SKILL_MD,
+    },
+  ],
+  "agent-reach": [
+    {
+      relativePath: "SKILL.md",
+      content: AGENT_REACH_SKILL_MD,
+    },
+  ],
+  "obsidian-skills": [
+    {
+      relativePath: "SKILL.md",
+      content: OBSIDIAN_SKILLS_SKILL_MD,
+    },
+  ],
+  superpowers: [
+    {
+      relativePath: "SKILL.md",
+      content: SUPERPOWERS_SKILL_MD,
+    },
+  ],
+  humanizer: [
+    {
+      relativePath: "SKILL.md",
+      content: HUMANIZER_SKILL_MD,
+    },
+  ],
+  "marketing-skills": [
+    {
+      relativePath: "SKILL.md",
+      content: MARKETING_SKILLS_SKILL_MD,
     },
   ],
 };

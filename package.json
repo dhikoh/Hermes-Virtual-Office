@@ -1,6 +1,6 @@
 {
   "name": "hermes3d",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "private": true,
   "license": "MIT",
   "scripts": {
@@ -17,7 +17,9 @@
     "smoke:dev-server": "node scripts/smoke-dev-server.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "brain:export": "node scripts/brain-export.mjs",
+    "brain:import": "node scripts/brain-import.mjs"
   },
   "dependencies": {
     "@noble/ed25519": "^3.0.0",

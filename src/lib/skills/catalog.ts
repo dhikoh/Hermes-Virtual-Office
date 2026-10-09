@@ -3,7 +3,18 @@ import type {
   SkillStatusEntry,
 } from "@/lib/skills/types";
 
-export type PackagedSkillId = "soundhermes" | "task-manager" | "todo-board";
+export type PackagedSkillId =
+  | "soundhermes"
+  | "task-manager"
+  | "todo-board"
+  | "caveman"
+  | "telegram-remote"
+  | "web-research"
+  | "agent-reach"
+  | "obsidian-skills"
+  | "superpowers"
+  | "humanizer"
+  | "marketing-skills";
 
 export type PackagedSkillDefinition = {
   packageId: PackagedSkillId;
@@ -51,6 +62,78 @@ const PACKAGED_SKILLS: PackagedSkillDefinition[] = [
     installSource: "hermes-workspace",
     creatorName: "iamlukethedev",
     creatorUrl: "https://github.com/iamlukethedev",
+  },
+  {
+    packageId: "caveman",
+    skillKey: "caveman",
+    name: "caveman",
+    description: "Compress agent responses into dense, high-signal language. Eliminates filler and saves 30-75% tokens on mobile.",
+    installSource: "hermes-workspace",
+    creatorName: "Julien Barbier",
+    creatorUrl: "https://github.com/julienbarbier42/caveman",
+  },
+  {
+    packageId: "telegram-remote",
+    skillKey: "telegram-remote",
+    name: "telegram-remote",
+    description: "Format task updates, notification badges, and approval cards for Telegram and mobile interfaces.",
+    installSource: "hermes-workspace",
+    creatorName: "Hermes Core",
+    creatorUrl: "https://github.com/iamlukethedev/Hermes3D",
+  },
+  {
+    packageId: "web-research",
+    skillKey: "web-research",
+    name: "web-research",
+    description: "Stealth web intelligence & scraping via Camoufox browser, saving reports directly to _AI/research/ vault.",
+    installSource: "hermes-workspace",
+    creatorName: "Hermes Core",
+    creatorUrl: "https://github.com/iamlukethedev/Hermes3D",
+  },
+  {
+    packageId: "agent-reach",
+    skillKey: "agent-reach",
+    name: "agent-reach",
+    description: "Social media and developer community scraping playbook for Twitter/X, Reddit, and LinkedIn via persistent Camoufox profiles.",
+    installSource: "hermes-workspace",
+    creatorName: "Prakhar Dixit",
+    creatorUrl: "https://github.com/prakhardixit/agent-reach",
+  },
+  {
+    packageId: "obsidian-skills",
+    skillKey: "obsidian-skills",
+    name: "obsidian-skills",
+    description: "Structure and maintain workspace knowledge base as a connected Obsidian Vault with [[wikilinks]], callouts, and canvas diagrams.",
+    installSource: "hermes-workspace",
+    creatorName: "Kepano & Community",
+    creatorUrl: "https://github.com/kepano/obsidian-skills",
+  },
+  {
+    packageId: "superpowers",
+    skillKey: "superpowers",
+    name: "superpowers",
+    description: "Rigorous software engineering discipline: requirement planning before coding, TDD, and multi-gate verification before commit.",
+    installSource: "hermes-workspace",
+    creatorName: "Superpowers Team",
+    creatorUrl: "https://github.com/obra/superpowers",
+  },
+  {
+    packageId: "humanizer",
+    skillKey: "humanizer",
+    name: "humanizer",
+    description: "Filter out repetitive AI patterns, robotic phrasing, and overused buzzwords for authentic human-sounding prose.",
+    installSource: "hermes-workspace",
+    creatorName: "Humanizer Community",
+    creatorUrl: "https://github.com/humanizer-ai/humanizer",
+  },
+  {
+    packageId: "marketing-skills",
+    skillKey: "marketing-skills",
+    name: "marketing-skills",
+    description: "Conversion rate optimization (CRO), landing page analysis, SEO checklist, and high-converting value proposition copy.",
+    installSource: "hermes-workspace",
+    creatorName: "Marketing Skills Hub",
+    creatorUrl: "https://github.com/marketing-skills/hub",
   },
 ];
 

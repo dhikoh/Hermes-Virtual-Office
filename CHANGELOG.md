@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.7] - 2026-10-10
+
+### Added
+- **1-Click Brain Migration Engine (Option 1)** (`server/system/brain-manager.js`): Pure Node.js streaming POSIX/GNU TAR + GZIP (`.tar.gz`) backup and restore engine for complete portability of AI notes (`_AI/`), chat history and Kanban tasks (`.hermes/`), browser profiles and cookies (`_AI/browser-profiles/`), and core memory files (`MEMORY.md`, `USER.md`, `SOUL.md`, `IDENTITY.md`, `api_providers.json`).
+- **CLI Migration Commands & REST Endpoints**: Added `npm run brain:export` (`scripts/brain-export.mjs`) and `npm run brain:import` (`scripts/brain-import.mjs`), alongside HTTP routes (`/api/system/brain/status`, `/api/system/brain/export`, `/api/system/brain/import`) and WebSocket RPCs (`brain.status`, `brain.export`, `brain.import`).
+- **Security Anti-Traversal Guard**: Safe archive unpacker rejecting directory escape (`..`) and absolute paths.
+- **Hermes Virtual Office Ecosystem Skills**: Packaged 8 standardized skills into `assets/skills/`, `src/lib/skills/packaged.ts`, and `src/lib/skills/catalog.ts` (`caveman`, `telegram-remote`, `web-research`, `agent-reach`, `obsidian-skills`, `superpowers`, `humanizer`, `marketing-skills`).
+- **Master SOUL Template** (`assets/personality/SOUL.md`): Office personality specification enforcing empirical skepticism, secret safety, concise vibe, and memory continuity.
+- **Docker & Coolify Runner Hardening** (`Dockerfile`): Added `assets/` and `scripts/` directory bundle copy into runner stage for immediate readiness on container deployment.
+- **Automated Unit Testing**: Added `tests/unit/brainMigration.test.ts` and updated `tests/unit/packagedSkills.test.ts` with 44 passing unit tests.
+
 ## [1.0.6] - 2026-10-10
 
 ### Added
