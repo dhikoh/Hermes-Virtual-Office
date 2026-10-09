@@ -31,6 +31,7 @@ export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand
   
   const [providers, setProviders] = useState<Provider[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [activeProviderId, setActiveProviderId] = useState<string | null>(null);
   
   // Form State
   const [name, setName] = useState("");
@@ -51,8 +52,12 @@ export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand
       const res = await sendCommand("config.providers.list", {});
       if (res.providers) {
         setProviders(res.providers);
+        if (res.activeProviderId) {
+          setActiveProviderId(res.activeProviderId);
+        }
         if (res.providers.length > 0 && !editingId) {
-          handleEdit(res.providers[0]);
+          const toSelect = (res.activeProviderId && res.providers.find((p: Provider) => p.id === res.activeProviderId)) || res.providers[0];
+          handleEdit(toSelect);
         }
       }
     } catch (err) {
@@ -84,6 +89,7 @@ export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand
       const res = await sendCommand("config.providers.delete", { providerId: id });
       if (res.providers) {
         setProviders(res.providers);
+        if (res.activeProviderId) setActiveProviderId(res.activeProviderId);
         if (editingId === id) {
           if (res.providers.length > 0) handleEdit(res.providers[0]);
           else handleAddNew();
@@ -119,6 +125,7 @@ export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand
       if (res.ok && res.providers) {
         setProviders(res.providers);
         setEditingId(provider.id);
+        if (res.activeProviderId) setActiveProviderId(res.activeProviderId);
         setActiveMessage("Profile saved successfully.");
       }
     } catch (err) {
@@ -150,8 +157,13 @@ export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand
   const handleUseProfile = async () => {
     const cleanUrl = normalizeUrl(apiUrl);
     try {
-      const res = await sendCommand("config.update", { apiUrl: cleanUrl, apiKey });
+      const res = await sendCommand("config.update", {
+        providerId: editingId,
+        apiUrl: cleanUrl,
+        apiKey
+      });
       if (res.ok) {
+        if (editingId) setActiveProviderId(editingId);
         setActiveMessage("This provider is now ACTIVE!");
       }
     } catch (err) {
@@ -174,24 +186,39 @@ export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {providers.map(p => (
-              <div 
-                key={p.id} 
-                className={`group flex items-center justify-between p-3 rounded-md cursor-pointer transition-colors ${editingId === p.id ? 'bg-primary/10 border border-primary/20' : 'hover:bg-white/5 border border-transparent'}`}
-                onClick={() => handleEdit(p)}
-              >
-                <div className="truncate">
-                  <div className={`text-sm font-semibold truncate ${editingId === p.id ? 'text-primary' : 'text-foreground'}`}>{p.name}</div>
-                  <div className="text-[10px] text-muted-foreground truncate">{p.url}</div>
-                </div>
-                <button 
-                  onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }}
-                  className="opacity-0 group-hover:opacity-100 p-1.5 text-muted-foreground hover:text-red-400 transition-opacity"
+            {providers.map((p) => {
+              const isSelected = editingId === p.id;
+              const isActive = activeProviderId === p.id;
+              return (
+                <div 
+                  key={p.id} 
+                  className={`group flex items-center justify-between p-3 rounded-md cursor-pointer transition-colors ${isSelected ? 'bg-primary/10 border border-primary/20' : 'hover:bg-white/5 border border-transparent'}`}
+                  onClick={() => handleEdit(p)}
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
+                  <div className="truncate flex-1 min-w-0 pr-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-sm font-semibold truncate ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                        {p.name}
+                      </span>
+                      {isActive && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground truncate">{p.url}</div>
+                  </div>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }}
+                    className="opacity-0 group-hover:opacity-100 p-1.5 text-muted-foreground hover:text-red-400 transition-opacity shrink-0"
+                    title="Delete provider"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            })}
             {providers.length === 0 && (
               <div className="p-4 text-xs text-center text-muted-foreground">No providers saved.</div>
             )}
@@ -205,7 +232,20 @@ export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand
           </div>
           
           <div className="p-6 flex-1 overflow-y-auto">
-            <h2 className="text-lg font-bold tracking-tight text-foreground mb-1">Edit Provider Profile</h2>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-lg font-bold tracking-tight text-foreground">Edit Provider Profile</h2>
+              {editingId && (
+                editingId === activeProviderId ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Active Provider
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-white/5 text-muted-foreground border border-white/10">
+                    Inactive Profile
+                  </span>
+                )
+              )}
+            </div>
             <p className="text-xs text-muted-foreground mb-6">Configure settings for this API connection.</p>
             
             <form id="provider-form" onSubmit={handleSaveProfile} className="space-y-4 max-w-lg">
@@ -285,10 +325,24 @@ export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand
                 <button
                   type="button"
                   onClick={handleUseProfile}
-                  className="ui-btn-primary px-4 text-xs flex items-center gap-2"
+                  className={`px-4 text-xs flex items-center gap-1.5 transition-colors ${
+                    editingId === activeProviderId
+                      ? "ui-btn-secondary opacity-80 cursor-default text-emerald-400 border border-emerald-500/30"
+                      : "ui-btn-primary"
+                  }`}
+                  disabled={editingId === activeProviderId}
                 >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  Use This Provider
+                  {editingId === activeProviderId ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Active Provider
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      Use This Provider
+                    </>
+                  )}
                 </button>
              </div>
           </div>

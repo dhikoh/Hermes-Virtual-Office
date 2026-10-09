@@ -324,6 +324,73 @@ function resolveHermesEndpoint(baseUrl, endpointPath) {
   return `${base}${endpoint}`;
 }
 
+function updateEnvFile(filePath, updates) {
+  if (!fs.existsSync(filePath)) return;
+  let content = fs.readFileSync(filePath, "utf8");
+  for (const [key, value] of Object.entries(updates)) {
+    if (typeof value !== "string") continue;
+    // Match only lines that START with key= (ignoring comments like # key=)
+    const lineRegex = new RegExp(`^${key}=.*$`, "m");
+    if (lineRegex.test(content)) {
+      content = content.replace(lineRegex, `${key}=${value}`);
+    } else {
+      content += `\n${key}=${value}\n`;
+    }
+  }
+  fs.writeFileSync(filePath, content, "utf8");
+}
+
+function readProvidersData() {
+  const providersFile = path.join(process.cwd(), "api_providers.json");
+  let providers = [];
+  let activeProviderId = null;
+  try {
+    if (fs.existsSync(providersFile)) {
+      const raw = JSON.parse(fs.readFileSync(providersFile, "utf8"));
+      if (Array.isArray(raw)) {
+        providers = raw;
+      } else if (raw && Array.isArray(raw.providers)) {
+        providers = raw.providers;
+        activeProviderId = raw.activeProviderId || null;
+      }
+    } else {
+      providers = [{ id: "default", name: "OpenRouter", url: "https://openrouter.ai/api", key: "" }];
+      activeProviderId = "default";
+      fs.writeFileSync(providersFile, JSON.stringify({ activeProviderId, providers }, null, 2));
+    }
+  } catch (err) {}
+
+  if (!activeProviderId || !providers.some((p) => p.id === activeProviderId)) {
+    const matched = providers.find((p) => resolveHermesBaseUrl(p.url) === HERMES_API_URL);
+    activeProviderId = matched ? matched.id : (providers[0]?.id || null);
+  }
+
+  return { providers, activeProviderId };
+}
+
+function writeProvidersData(providers, activeProviderId) {
+  const providersFile = path.join(process.cwd(), "api_providers.json");
+  try {
+    fs.writeFileSync(providersFile, JSON.stringify({ activeProviderId, providers }, null, 2));
+  } catch (err) {}
+}
+
+function syncActiveProviderFromDisk() {
+  try {
+    const provData = readProvidersData();
+    if (provData.activeProviderId) {
+      const activeProv = provData.providers.find((p) => p.id === provData.activeProviderId);
+      if (activeProv && activeProv.url) {
+        const resolvedUrl = resolveHermesBaseUrl(activeProv.url);
+        if (resolvedUrl) HERMES_API_URL = resolvedUrl;
+        if (typeof activeProv.key === "string" && activeProv.key) HERMES_API_KEY = activeProv.key;
+      }
+    }
+  } catch (e) {}
+}
+
+syncActiveProviderFromDisk();
+
 function hermesPost(path, body) {
   return new Promise((resolve, reject) => {
     const urlStr = resolveHermesEndpoint(HERMES_API_URL, path);
@@ -1156,59 +1223,39 @@ async function handleMethod(method, params, id, sendEvent) {
     // --- Config Update ------------------------------------------------------
 
     case "config.providers.list": {
-      const fs = require("fs");
-      const path = require("path");
-      const providersFile = path.join(process.cwd(), "api_providers.json");
-      let list = [];
-      try {
-        if (fs.existsSync(providersFile)) {
-          list = JSON.parse(fs.readFileSync(providersFile, "utf8"));
-        } else {
-          list = [{ id: "default", name: "OpenRouter", url: "https://openrouter.ai/api", key: "" }];
-          fs.writeFileSync(providersFile, JSON.stringify(list, null, 2));
-        }
-      } catch (err) {}
-      return resOk(id, { providers: list });
+      const { providers, activeProviderId } = readProvidersData();
+      return resOk(id, { providers, activeProviderId });
     }
 
     case "config.providers.save": {
-      const fs = require("fs");
-      const path = require("path");
-      const providersFile = path.join(process.cwd(), "api_providers.json");
-      let list = [];
-      try {
-        if (fs.existsSync(providersFile)) list = JSON.parse(fs.readFileSync(providersFile, "utf8"));
-      } catch (err) {}
-      
+      let { providers, activeProviderId } = readProvidersData();
       const newProv = p.provider;
       if (!newProv || !newProv.id) return resOk(id, { ok: false });
       
-      const idx = list.findIndex(x => x.id === newProv.id);
-      if (idx >= 0) list[idx] = newProv;
-      else list.push(newProv);
+      const idx = providers.findIndex((x) => x.id === newProv.id);
+      if (idx >= 0) providers[idx] = newProv;
+      else providers.push(newProv);
       
-      try { fs.writeFileSync(providersFile, JSON.stringify(list, null, 2)); } catch (err) {}
-      return resOk(id, { ok: true, providers: list });
+      writeProvidersData(providers, activeProviderId);
+      return resOk(id, { ok: true, providers, activeProviderId });
     }
 
     case "config.providers.delete": {
-      const fs = require("fs");
-      const path = require("path");
-      const providersFile = path.join(process.cwd(), "api_providers.json");
-      let list = [];
-      try {
-        if (fs.existsSync(providersFile)) list = JSON.parse(fs.readFileSync(providersFile, "utf8"));
-      } catch (err) {}
-      
-      list = list.filter(x => x.id !== p.providerId);
-      try { fs.writeFileSync(providersFile, JSON.stringify(list, null, 2)); } catch (err) {}
-      return resOk(id, { ok: true, providers: list });
+      let { providers, activeProviderId } = readProvidersData();
+      providers = providers.filter((x) => x.id !== p.providerId);
+      if (activeProviderId === p.providerId) {
+        activeProviderId = providers[0]?.id || null;
+      }
+      writeProvidersData(providers, activeProviderId);
+      return resOk(id, { ok: true, providers, activeProviderId });
     }
 
     case "config.update": {
       let updated = false;
       const apiUrl = p.apiUrl;
       const apiKey = p.apiKey;
+      let { providers, activeProviderId } = readProvidersData();
+
       if (typeof apiUrl === "string") {
         HERMES_API_URL = resolveHermesBaseUrl(apiUrl);
         process.env.HERMES_API_URL = HERMES_API_URL;
@@ -1219,32 +1266,30 @@ async function handleMethod(method, params, id, sendEvent) {
         process.env.HERMES_API_KEY = apiKey;
         updated = true;
       }
+
+      if (p.providerId && providers.some((x) => x.id === p.providerId)) {
+        activeProviderId = p.providerId;
+      } else if (typeof apiUrl === "string") {
+        const found = providers.find((x) => resolveHermesBaseUrl(x.url) === HERMES_API_URL);
+        if (found) activeProviderId = found.id;
+      }
+
+      writeProvidersData(providers, activeProviderId);
+
       if (updated) {
         cachedHermesModels = null;
         cachedHermesModelsAt = 0;
         try {
-          const envPath = require("path").join(process.cwd(), ".env");
-          let envContent = require("fs").readFileSync(envPath, "utf8");
-          if (typeof apiUrl === "string") {
-            if (envContent.includes("HERMES_API_URL=")) {
-              envContent = envContent.replace(/HERMES_API_URL=.*(\r?\n|$)/, `HERMES_API_URL=${HERMES_API_URL}$1`);
-            } else {
-              envContent += `\nHERMES_API_URL=${HERMES_API_URL}\n`;
-            }
-          }
-          if (typeof apiKey === "string") {
-            if (envContent.includes("HERMES_API_KEY=")) {
-              envContent = envContent.replace(/HERMES_API_KEY=.*(\r?\n|$)/, `HERMES_API_KEY=${apiKey}$1`);
-            } else {
-              envContent += `\nHERMES_API_KEY=${apiKey}\n`;
-            }
-          }
-          require("fs").writeFileSync(envPath, envContent, "utf8");
+          const envPath = path.join(process.cwd(), ".env");
+          updateEnvFile(envPath, {
+            HERMES_API_URL: HERMES_API_URL,
+            HERMES_API_KEY: HERMES_API_KEY,
+          });
         } catch(err) {
           console.error("[hermes-adapter] Failed to update .env", err);
         }
       }
-      return resOk(id, { ok: true });
+      return resOk(id, { ok: true, activeProviderId });
     }
 
     case "config.test": {
@@ -1465,4 +1510,7 @@ if (require.main === module) {
 module.exports = {
   resolveHermesEndpoint,
   resolveHermesBaseUrl,
+  updateEnvFile,
+  readProvidersData,
+  writeProvidersData,
 };

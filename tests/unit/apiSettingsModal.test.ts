@@ -108,10 +108,38 @@ describe("ApiSettingsModal", () => {
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith("config.update", {
+        providerId: "p1",
         apiUrl: "https://openrouter.ai/api",
         apiKey: "sk-active",
       });
       expect(screen.getByText("This provider is now ACTIVE!")).toBeInTheDocument();
+    });
+  });
+
+  it("displays Active badge and disables activation button for already active provider", async () => {
+    const mockProviders = [
+      { id: "p1", name: "Current Active", url: "https://openrouter.ai/api", key: "sk-active" },
+      { id: "p2", name: "Backup Provider", url: "https://api.trustisgold.web.id/v1", key: "sk-backup" },
+    ];
+
+    const sendCommand = vi.fn().mockImplementation((method: string) => {
+      if (method === "config.providers.list") {
+        return Promise.resolve({ providers: mockProviders, activeProviderId: "p1" });
+      }
+      return Promise.resolve({});
+    });
+
+    render(
+      createElement(ApiSettingsModal, {
+        onClose: vi.fn(),
+        sendCommand,
+      })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Current Active")).toBeInTheDocument();
+      expect(screen.getByText("Active")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /active provider/i })).toBeDisabled();
     });
   });
 });

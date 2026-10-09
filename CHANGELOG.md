@@ -5,11 +5,13 @@
 ### Added
 - Session History UI (`SessionHistoryModal`) accessible directly from the Chat Panel header, supporting session browsing, switching, and deletion.
 - Clipboard image paste (`Ctrl+V`) for chat composer with automatic image detection and `/api/files/upload` handling.
+- Active Provider Indicator in `ApiSettingsModal` with visual `● Active` badges, profile header status, and dynamic activation button state.
 - Comprehensive unit test coverage for URL normalization, Session History Modal, API Settings Modal, and Clipboard Image Paste.
 
 ### Fixed
 - Resolved "New Session" issue where starting a new session cleared existing conversation history; now generates unique timestamped session keys (`agent:<id>:<timestamp>`).
 - Added robust URL endpoint normalization in both `ApiSettingsModal.tsx` and `hermes-gateway-adapter.js`, automatically stripping trailing `/models`, `/chat/completions`, and repeated `/v1/v1` loops so any pasted endpoint variation works seamlessly.
+- Fixed `.env` variable replacement in `hermes-gateway-adapter.js` using line-anchored regex matching to prevent overriding commented templates and ensure provider activation persists across reboots without reverting to OpenRouter defaults.
 - Added `api_providers.json` to `.gitignore` to safeguard local credentials.
 - Fixed TypeScript compiler errors, declared `SessionListEntry` types, and resolved missing Gateway context imports.
 - Consolidated documentation by removing duplicate spec files in `docs/` and cleaned obsolete root test scripts.
