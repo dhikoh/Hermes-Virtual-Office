@@ -71,8 +71,8 @@ const assertPublicHostAllowed = ({ host, studioAccessToken }) => {
 
   const normalized = normalizeHost(host) || String(host ?? "").trim() || "(unknown)";
   throw new Error(
-    `Refusing to bind Studio to public host "${normalized}" without STUDIO_ACCESS_TOKEN. ` +
-      "Set STUDIO_ACCESS_TOKEN or bind HOST to 127.0.0.1/::1/localhost."
+    `Refusing to bind Studio to public host "${normalized}" without STUDIO_ADMIN_PASSWORD or STUDIO_ACCESS_TOKEN. ` +
+      "Set STUDIO_ADMIN_PASSWORD or bind HOST to 127.0.0.1/::1/localhost."
   );
 };
 

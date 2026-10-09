@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.11] - 2026-10-10
+
+### Added
+- **Security Access Gate & Cyber Login Interface**:
+  - Implemented standalone `/login` interface with futuristic cyber-office aesthetic, Hermes pulsing branding, password visibility toggle, and instant error handling.
+  - Implemented secure authentication API routes (`/api/auth/login`, `/api/auth/logout`, `/api/auth/status`).
+  - Added session management in `src/lib/auth/session.ts` with constant-time verification, SHA-256 session token hashing, and 30-day `HttpOnly` cookie retention.
+  - Upgraded `server/access-gate.js` with path bypass for auth assets, seamless 302 redirect to `/login` for unauthenticated browser sessions, and JSON 401 response for API requests.
+  - Added "Security & Session" management in `SettingsPanel.tsx` with one-click **Log Out** button.
+  - Supported `STUDIO_ADMIN_USER` and `STUDIO_ADMIN_PASSWORD` (with `STUDIO_ACCESS_TOKEN` backwards compatibility) in `.env.example` and `docker-compose.yml`.
+  - Added comprehensive unit tests in `tests/unit/authSession.test.ts` and `tests/unit/accessGate.test.ts`.
+
 ## [1.0.10] - 2026-10-10
 
 ### Added

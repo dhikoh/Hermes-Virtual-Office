@@ -149,4 +149,57 @@ describe("createAccessGate", () => {
     expect(afterReset.statusCode).toBe(401);
     expect(afterReset.body).toContain("Studio access token required");
   });
+
+  it("bypasses /login and auth API endpoints without blocking", async () => {
+    const { createAccessGate } = await import("../../server/access-gate");
+    const gate = createAccessGate({ token: "abc" });
+
+    const res = { setHeader: () => {}, end: () => {}, statusCode: 0 };
+    expect(gate.handleHttp({ url: "/login" }, res)).toBe(false);
+    expect(gate.handleHttp({ url: "/api/auth/login" }, res)).toBe(false);
+    expect(gate.handleHttp({ url: "/_next/static/chunks/main.js" }, res)).toBe(false);
+    expect(gate.handleHttp({ url: "/favicon.ico" }, res)).toBe(false);
+  });
+
+  it("redirects unauthenticated browser requests to /login with 302", async () => {
+    const { createAccessGate } = await import("../../server/access-gate");
+    const gate = createAccessGate({ token: "abc" });
+
+    let locationHeader = "";
+    let statusCode = 0;
+    const res = {
+      setHeader: (name: string, value: string) => {
+        if (name.toLowerCase() === "location") locationHeader = value;
+      },
+      end: () => {},
+      get statusCode() {
+        return statusCode;
+      },
+      set statusCode(val: number) {
+        statusCode = val;
+      },
+    };
+
+    const handled = gate.handleHttp({ url: "/office" }, res);
+    expect(handled).toBe(true);
+    expect(statusCode).toBe(302);
+    expect(locationHeader).toBe("/login?redirect=%2Foffice");
+  });
+
+  it("allows authentication using sha256 session hash in cookie", async () => {
+    const crypto = await import("node:crypto");
+    const { createAccessGate } = await import("../../server/access-gate");
+    const token = "secretpass123";
+    const sessionHash = crypto
+      .createHash("sha256")
+      .update(`${token}_hermes_session_salt`)
+      .digest("hex");
+
+    const gate = createAccessGate({ token });
+    expect(
+      gate.allowUpgrade({
+        headers: { cookie: `studio_access=${sessionHash}` },
+      })
+    ).toBe(true);
+  });
 });

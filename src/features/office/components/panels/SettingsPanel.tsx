@@ -11,6 +11,7 @@ import {
   OFFICE_RENDER_MODE_OPTIONS,
   type OfficeRenderMode,
 } from "@/features/office/renderMode";
+import { LogOut, Shield } from "lucide-react";
 
 type SettingsPanelProps = {
   gatewayStatus?: string;
@@ -587,6 +588,34 @@ export function SettingsPanel({
         <div className="mt-1 flex items-center justify-between text-[10px] text-white/45">
           <span>Slower</span>
           <span>Faster</span>
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-lg border border-cyan-500/10 bg-black/20 p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Shield className="h-4 w-4 text-cyan-400" />
+            <div>
+              <div className="text-[11px] font-medium text-white">Security & Session</div>
+              <div className="mt-0.5 text-[10px] text-white/60">
+                Kelola sesi aktif dan autentikasi kantor virtual.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await fetch("/api/auth/logout", { method: "POST" });
+              } finally {
+                window.location.href = "/login";
+              }
+            }}
+            className="flex items-center gap-1.5 rounded-md border border-rose-500/30 bg-rose-950/30 px-3 py-1.5 text-[11px] font-medium text-rose-300 transition-colors hover:border-rose-400/50 hover:bg-rose-900/40"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            <span>Log Out</span>
+          </button>
         </div>
       </div>
     </div>

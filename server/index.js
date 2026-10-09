@@ -69,10 +69,13 @@ async function main() {
   const hostnames = Array.from(new Set(resolveHosts(process.env)));
   const hostname = hostnames[0] ?? "127.0.0.1";
   const port = resolvePort();
+  const activeToken =
+    process.env.STUDIO_ADMIN_PASSWORD?.trim() || process.env.STUDIO_ACCESS_TOKEN?.trim() || "";
+
   for (const host of hostnames) {
     assertPublicHostAllowed({
       host,
-      studioAccessToken: process.env.STUDIO_ACCESS_TOKEN,
+      studioAccessToken: activeToken,
     });
   }
 
@@ -85,7 +88,7 @@ async function main() {
   const handle = app.getRequestHandler();
 
   const accessGate = createAccessGate({
-    token: process.env.STUDIO_ACCESS_TOKEN,
+    token: activeToken,
   });
 
   const proxy = createGatewayProxy({

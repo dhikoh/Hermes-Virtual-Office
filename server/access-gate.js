@@ -1,6 +1,5 @@
 const crypto = require("node:crypto");
 
-
 const parseCookies = (header) => {
   const raw = typeof header === "string" ? header : "";
   if (!raw.trim()) return {};
@@ -27,6 +26,12 @@ const safeCompare = (a, b) => {
     return false;
   }
   return crypto.timingSafeEqual(bufA, bufB);
+};
+
+const SESSION_SALT = "_hermes_session_salt";
+const hashSessionToken = (secret) => {
+  if (!secret) return "";
+  return crypto.createHash("sha256").update(`${secret}${SESSION_SALT}`).digest("hex");
 };
 
 /** Simple in-memory rate limiter for auth attempts. */
@@ -79,8 +84,22 @@ const resolveClientIp = (req) => {
   return req.socket?.remoteAddress || "unknown";
 };
 
+const isBypassPath = (url) => {
+  const raw = typeof url === "string" ? url : "";
+  const pathname = (raw.split("?")[0] || "/").toLowerCase();
+  return (
+    pathname === "/login" ||
+    pathname.startsWith("/login/") ||
+    pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/assets/") ||
+    pathname === "/favicon.ico"
+  );
+};
+
 function createAccessGate(options) {
   const token = String(options?.token ?? "").trim();
+  const sessionHash = hashSessionToken(token);
   const cookieName = String(options?.cookieName ?? "studio_access").trim() || "studio_access";
 
   const enabled = Boolean(token);
@@ -91,7 +110,8 @@ function createAccessGate(options) {
     const ip = resolveClientIp(req);
     const cookieHeader = req.headers?.cookie;
     const cookies = parseCookies(cookieHeader);
-    const authorized = safeCompare(cookies[cookieName] || "", token);
+    const cookieVal = cookies[cookieName] || "";
+    const authorized = safeCompare(cookieVal, token) || safeCompare(cookieVal, sessionHash);
     if (authorized) {
       rateLimiter.reset(ip);
       return { authorized: true, limited: false };
@@ -105,10 +125,15 @@ function createAccessGate(options) {
 
   const handleHttp = (req, res) => {
     if (!enabled) return false;
+    if (isBypassPath(req.url)) return false;
+
     const auth = getAuthState(req);
     if (!auth.authorized) {
+      const pathname = String(req.url || "/").split("?")[0];
+      const isApi = pathname.startsWith("/api/");
       const statusCode = auth.limited ? 429 : 401;
-      if (String(req.url || "/").startsWith("/api/")) {
+
+      if (isApi) {
         res.statusCode = statusCode;
         res.setHeader("Content-Type", "application/json");
         res.end(
@@ -118,15 +143,21 @@ function createAccessGate(options) {
               : "Studio access token required. Send the configured Studio access cookie and retry.",
           })
         );
-      } else {
-        res.statusCode = statusCode;
-        res.setHeader("Content-Type", "text/plain");
-        res.end(
-          auth.limited
-            ? "Too many failed studio access attempts. Wait a minute and retry."
-            : "Studio access token required. Set the studio_access cookie to access this page."
-        );
+        return true;
       }
+
+      if (auth.limited) {
+        res.statusCode = 429;
+        res.setHeader("Content-Type", "text/plain");
+        res.end("Too many failed studio access attempts. Wait a minute and retry.");
+        return true;
+      }
+
+      // Seamless redirect to /login
+      res.statusCode = 302;
+      const target = encodeURIComponent(req.url || "/office");
+      res.setHeader("Location", `/login?redirect=${target}`);
+      res.end();
       return true;
     }
     return false;

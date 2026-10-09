@@ -1,5 +1,13 @@
 # Hermes3D Patch Notes
 
+## Patch v1.0.11 - Security Access Gate & Cyber Login Interface
+- **Feature (Cyber Access Gate UI)**: Implemented dedicated `/login` page with futuristic dark aesthetics, pulsing status badge, username/password inputs, show/hide password toggle, and instant error feedback.
+- **Feature (Auth API Routes)**: Built `/api/auth/login`, `/api/auth/logout`, and `/api/auth/status` with constant-time credential comparison, SHA-256 session token hashing, and 30-day `HttpOnly` cookie persistence.
+- **Feature (Access Gate & Redirect Interceptor)**: Upgraded `server/access-gate.js` to whitelist auth assets, automatically redirect unauthenticated browser visits (`302`) to `/login`, and reject unauthenticated API requests with JSON 401.
+- **Feature (Office Logout Integration)**: Added "Security & Session" section with a one-click **Log Out** button in `SettingsPanel.tsx`.
+- **Environment & Docker Config**: Configured `STUDIO_ADMIN_USER` and `STUDIO_ADMIN_PASSWORD` in `docker-compose.yml` and `.env.example`.
+- **E2E & Unit Test Coverage**: Added unit tests in `tests/unit/authSession.test.ts`, verified browser session with visual artifacts and screenshots (`login_page_initial`).
+
 ## Patch v1.0.10 - Coolify & Production Cloud Deployment Suite
 - **Feature (Multi-Process Production Runner)**: Created `server/start-production.js` to orchestrate both the Hermes Gateway Adapter daemon (WebSocket & REST API on port 18789) and Next.js Web Server (port 3000) inside a single container with unified signal handling (`SIGTERM`/`SIGINT`).
 - **Feature (Production Dockerfile Hardening)**: Updated `Dockerfile` runner stage to bundle `api_providers.json`, create persistent directory paths (`/app/_AI`, `/app/.hermes`), and execute `server/start-production.js` by default.
