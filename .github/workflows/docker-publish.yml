@@ -40,17 +40,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          repo_owner="$(printf '%s' "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          image_name="ghcr.io/${repo_owner}/hermes3d"
           tags=()
           ref_name="$(printf '%s' "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | tr '/_' '-' | tr -cd 'a-z0-9.-')"
           if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            tags+=("${IMAGE_NAME}:main")
+            tags+=("${image_name}:main")
           elif [[ "${GITHUB_REF}" == refs/heads/* ]]; then
-            tags+=("${IMAGE_NAME}:${ref_name}")
+            tags+=("${image_name}:${ref_name}")
           fi
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             version="${GITHUB_REF#refs/tags/v}"
-            tags+=("${IMAGE_NAME}:${version}")
-            tags+=("${IMAGE_NAME}:latest")
+            tags+=("${image_name}:${version}")
+            tags+=("${image_name}:latest")
           fi
           {
             echo "value<<EOF"

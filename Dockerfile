@@ -28,7 +28,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # Links images to the repository on GHCR, so packages created by a push
 # automatically grant this repo's workflows access and show up on the repo page.
-LABEL org.opencontainers.image.source="https://github.com/iamlukethedev/Hermes3D"
+LABEL org.opencontainers.image.source="https://github.com/dhikoh/Hermes-Virtual-Office"
 LABEL org.opencontainers.image.description="Hermes3D — a 3D workspace for AI agents."
 LABEL org.opencontainers.image.licenses="MIT"
 
