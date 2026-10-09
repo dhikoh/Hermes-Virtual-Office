@@ -185,8 +185,13 @@ export const createPixelOfficeScene = (params: {
         // Flat decor stays under everything that walks over it.
         const flat = object.kind === "rug" || object.kind === "flower";
         image.setDepth(flat ? 1 : bottomY);
-        if (object.kind === "jukebox" || object.kind === "kanban_board") {
-          const stationKind = object.kind === "jukebox" ? "jukebox" : "kanban";
+        if (object.kind === "jukebox" || object.kind === "kanban_board" || object.kind === "whiteboard") {
+          const stationKind =
+            object.kind === "jukebox"
+              ? "jukebox"
+              : object.kind === "whiteboard"
+                ? "whiteboard"
+                : "kanban";
           image.setInteractive({ useHandCursor: true });
           image.on("pointerover", () => image.setTint(0xbfe8ff));
           image.on("pointerout", () => image.clearTint());

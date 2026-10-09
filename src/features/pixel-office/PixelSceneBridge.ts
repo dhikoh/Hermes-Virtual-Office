@@ -3,7 +3,7 @@
 
 import type { PixelAgentInput } from "@/features/pixel-office/types";
 
-export type PixelInteractiveStationKind = "jukebox" | "kanban";
+export type PixelInteractiveStationKind = "jukebox" | "kanban" | "whiteboard";
 
 export type PixelBridgeState = {
   agents: PixelAgentInput[];

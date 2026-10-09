@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.9] - 2026-10-10
+
+### Fixed
+- **Full Interactivity Activation for All Office Boards (Whiteboard & Kanban Board)**:
+  - Fixed issue where clicking Kanban boards in CX Team and Product Team appeared unresponsive because the sidebar remained collapsed (`setSidebarOpen(true)` was missing).
+  - Wired automatic slide-in expansion of the Headquarters sidebar directly upon clicking Kanban boards and Whiteboards in both 2D Pixel Office (`PixelOffice2D`) and 3D Retro Office (`RetroOffice3D`).
+  - Added interactive station registration for `whiteboard` objects in Meeting Room and Ops Corner in `PixelOfficeScene.ts`, enabling hover pointer, blue highlight tint (`#bfe8ff`), and click triggers.
+  - Extended `PixelInteractiveStationKind` in `PixelSceneBridge.ts` to include `"whiteboard"`, and wired `onWhiteboardInteract` prop through `PixelOffice2D.tsx`.
+  - Verified end-to-end with real browser test and visual artifacts confirming smooth sidebar slide-in and active Kanban columns.
+
 ## [1.0.8] - 2026-10-10
 
 ### Fixed

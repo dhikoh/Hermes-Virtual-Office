@@ -1,5 +1,16 @@
 # Hermes3D Patch Notes
 
+## Patch v1.0.9 - Full Interactive Board Activation (Whiteboard & Kanban Board)
+- **Fix (Auto-Open Kanban Sidebar on Board Click)**: Resolved issue where clicking Kanban boards in CX Team and Product Team felt unresponsive because the sidebar remained collapsed. `OfficeScreen.tsx` now calls `setSidebarOpen(true)` whenever `onKanbanInteract` is triggered, automatically sliding in the Headquarters sidebar with the Kanban board panel active.
+- **Feature (Interactive Whiteboard in Meeting Room & Ops Corner)**: Registered `whiteboard` objects as interactive stations in `PixelOfficeScene.ts`. Hovering over a whiteboard now displays a hand cursor and blue glow tint (`#bfe8ff`), and clicking it automatically slides open the Headquarters sidebar.
+- **Architecture (Bridge & Props Wiring)**: Extended `PixelInteractiveStationKind` to include `"whiteboard"` in `PixelSceneBridge.ts` and plumbed `onWhiteboardInteract` through `PixelOffice2D.tsx` to `OfficeScreen.tsx`.
+- **E2E Visual Verification**: Validated in real browser via subagent and captured screenshots confirming that clicking Product Team boards or Meeting Room whiteboards immediately slides open the Kanban board showing all task columns (`INBOX`, `SCHEDULED`, `WORKING`, `NEEDS ATTENTION`, `DONE`) and task details drawer. Zero TypeScript errors (`tsc --noEmit`), zero ESLint errors.
+
+## Patch v1.0.8 - Kanban Task-Manager Skill Resolution & Gateway Status Fix
+- **Bug Fix (TypeError trim on Kanban Skill Install)**: Resolved `Cannot read properties of undefined (reading 'trim')` by safely guarding `normalizeRequired` in `src/lib/skills/install-gateway.ts` against `undefined`/`null` values and adding automatic fallback recovery for missing `workspaceDir` from agent file provenance.
+- **Feature (Gateway Skills RPC Implementation)**: Upgraded `server/hermes-gateway-adapter.js` to implement full `skills.status`, `skills.update`, and `skills.install` RPC methods, pre-populating all 11 Hermes Virtual Office ecosystem skills as eligible and ready.
+- **Fast-Path File Materialization**: Implemented synchronous file writer in `hermes-gateway-adapter.js` for installer messages, completing skill installations instantly.
+
 ## Patch v1.0.7 - Hermes Virtual Office Ecosystem & 1-Click Brain Migration Engine
 - **Feature (1-Click Brain Migration Engine - Option 1)**: Implemented `server/system/brain-manager.js` using streaming POSIX/GNU TAR + GZIP (`.tar.gz`) in pure Node.js (zero external dependencies). Backs up and restores the complete AI brain: knowledge notes (`_AI/`), chat history and Kanban tasks (`.hermes/`), persistent Camoufox browser profiles and cookies (`_AI/browser-profiles/`), and core memory files (`MEMORY.md`, `USER.md`, `SOUL.md`, `IDENTITY.md`, `api_providers.json`).
 - **Feature (CLI Migration Commands & REST Endpoints)**: Added `npm run brain:export` (`scripts/brain-export.mjs`) and `npm run brain:import` (`scripts/brain-import.mjs`) for 1-click VPS migration. Integrated HTTP routes (`GET /api/system/brain/status`, `GET /api/system/brain/export`, `POST /api/system/brain/import`) and gateway RPC methods (`brain.status`, `brain.export`, `brain.import`) into `server/hermes-gateway-adapter.js`.

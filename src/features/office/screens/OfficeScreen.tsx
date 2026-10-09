@@ -4649,9 +4649,14 @@ export function OfficeScreen({
           onKanbanInteract={() => {
             if (kanbanDeskEnabled) {
               setActiveSidebarTab("kanban");
+              setSidebarOpen(true);
             } else {
               setKanbanInstallPromptOpen(true);
             }
+          }}
+          onWhiteboardInteract={() => {
+            setActiveSidebarTab("kanban");
+            setSidebarOpen(true);
           }}
           officeTitle={officeTitle}
           officeTitleLoaded={officeTitleLoaded}
@@ -4817,7 +4822,12 @@ export function OfficeScreen({
             setJukeboxOpen(true);
           }}
           onKanbanInteract={() => {
-            setKanbanInstallPromptOpen(true);
+            if (kanbanDeskEnabled) {
+              setActiveSidebarTab("kanban");
+              setSidebarOpen(true);
+            } else {
+              setKanbanInstallPromptOpen(true);
+            }
           }}
           taskBoardAgents={state.agents}
           taskBoardCardsByStatus={taskBoard.cardsByStatus}

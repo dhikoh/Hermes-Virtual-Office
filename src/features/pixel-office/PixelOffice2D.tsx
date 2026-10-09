@@ -40,6 +40,7 @@ export type PixelOffice2DProps = {
   onAgentDelete?: (agentId: string) => void;
   onJukeboxInteract?: () => void;
   onKanbanInteract?: () => void;
+  onWhiteboardInteract?: () => void;
   officeTitle: string;
   officeTitleLoaded: boolean;
   onOfficeTitleChange?: (title: string) => void;
@@ -91,6 +92,7 @@ export function PixelOffice2D(props: PixelOffice2DProps) {
     onAgentDelete,
     onJukeboxInteract,
     onKanbanInteract,
+    onWhiteboardInteract,
     officeTitle,
     officeTitleLoaded,
     gatewayStatus = "disconnected",
@@ -154,8 +156,9 @@ export function PixelOffice2D(props: PixelOffice2DProps) {
       setContextMenu(null);
       if (kind === "jukebox") onJukeboxInteract?.();
       if (kind === "kanban") onKanbanInteract?.();
+      if (kind === "whiteboard") onWhiteboardInteract?.();
     };
-  }, [bridge, onAgentChatSelect, onJukeboxInteract, onKanbanInteract]);
+  }, [bridge, onAgentChatSelect, onJukeboxInteract, onKanbanInteract, onWhiteboardInteract]);
 
   useEffect(() => {
     let canceled = false;
