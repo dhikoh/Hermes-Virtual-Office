@@ -59,7 +59,7 @@ loadRuntimeEnv();
 let HERMES_API_URL = (process.env.HERMES_API_URL || "http://localhost:8642").replace(/\/$/, "");
 let HERMES_API_KEY = process.env.HERMES_API_KEY || "";
 const ADAPTER_PORT = parseInt(process.env.HERMES_ADAPTER_PORT || "18789", 10);
-const HERMES_MODEL = process.env.HERMES_MODEL || "hermes";
+let HERMES_MODEL = process.env.HERMES_MODEL || "hermes";
 const HERMES_AGENT_NAME = process.env.HERMES_AGENT_NAME || "Hermes";
 const HOME = process.env.HOME || "/tmp";
 
@@ -1276,20 +1276,38 @@ async function handleMethod(method, params, id, sendEvent) {
 
       writeProvidersData(providers, activeProviderId);
 
+      let newModels = [];
       if (updated) {
         cachedHermesModels = null;
         cachedHermesModelsAt = 0;
+        try {
+          newModels = await fetchHermesModels();
+        } catch(e) {
+          console.warn("[hermes-adapter] Failed to fetch models on provider switch:", e.message);
+        }
+
+        if (newModels.length > 0 && !newModels.includes(HERMES_MODEL)) {
+          HERMES_MODEL = newModels[0];
+          process.env.HERMES_MODEL = HERMES_MODEL;
+        }
+
         try {
           const envPath = path.join(process.cwd(), ".env");
           updateEnvFile(envPath, {
             HERMES_API_URL: HERMES_API_URL,
             HERMES_API_KEY: HERMES_API_KEY,
+            HERMES_MODEL: HERMES_MODEL,
           });
         } catch(err) {
           console.error("[hermes-adapter] Failed to update .env", err);
         }
       }
-      return resOk(id, { ok: true, activeProviderId });
+      return resOk(id, {
+        ok: true,
+        activeProviderId,
+        models: newModels,
+        defaultModel: HERMES_MODEL,
+      });
     }
 
     case "config.test": {

@@ -1,5 +1,12 @@
 # Hermes3D Patch Notes
 
+## Patch v1.0.3 - Real-Time Model Sync & Per-Agent Dynamic Assignment
+- **Feature (Real-Time Model Synchronization)**: When activating an API Provider in `ApiSettingsModal.tsx`, the adapter immediately invalidates cached models, fetches the latest model list from the new endpoint (`fetchHermesModels()`), auto-selects a valid default model, persists `HERMES_MODEL` to `.env`, and returns the model catalog in the `config.update` response.
+- **Feature (Client-Side Model Hot-Reload)**: Connected `onProviderActivated` callback between `ApiSettingsModal.tsx` and `OfficeScreen.tsx`. Activating a provider immediately pushes the new models into the client state (`gatewayModels`), refreshing the Chat Panel dropdown instantaneously without requiring a page reload or gateway reconnect.
+- **Bug Fix & Improvement (Automatic Agent Model Migration)**: In `OfficeScreen.tsx`, agents assigned models that do not exist in the newly selected provider's catalog are automatically migrated to the provider's valid default model, preventing obsolete fallback model displays (e.g., lingering `hermes/nvidia/nemotron-3.5-lightning:free` when switching to custom providers like `trustisgold.web.id`).
+- **Feature (Flexible Multi-Agent Model Assignment)**: Clarified and streamlined multi-agent model assignment. Different agents can independently select any model available under the active provider, or all agents can share the same default model without conflicts.
+- **Full Verification & Quality Assurance**: All 188 unit test suites (1245 tests) pass cleanly with Vitest. TypeScript compilation verified with zero errors (`tsc --noEmit`). Verified live bidirectional gateway synchronization and `.env` persistence on `ws://localhost:18789`.
+
 ## Patch v1.0.2 - Session History UI, Clipboard Images & Quality Hardening
 - **Feature (Session History UI)**: Added a full **Session History UI** (`SessionHistoryModal.tsx`) directly accessible from the Chat Panel header (`History` button) in the `/office` main screen (`OfficeScreen.tsx`). Allows reviewing past sessions, switching active session, or deleting obsolete sessions. Verified by `tests/unit/sessionHistoryModal.test.ts`.
 - **Backend Improvement (`sessions.list` & `sessions.delete`)**: Refactored `sessions.list` in `server/hermes-gateway-adapter.js` to iterate over all stored sessions across agents instead of restricting to single main session. Added dedicated `sessions.delete` command that cleanly deletes sessions from persistent storage and disk history.

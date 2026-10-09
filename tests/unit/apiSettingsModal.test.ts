@@ -142,4 +142,50 @@ describe("ApiSettingsModal", () => {
       expect(screen.getByRole("button", { name: /active provider/i })).toBeDisabled();
     });
   });
+
+  it("calls onProviderActivated with updated models and defaultModel when activated", async () => {
+    const mockProviders = [
+      { id: "p1", name: "Custom API", url: "https://api.trustisgold.web.id/v1", key: "sk-tig" },
+    ];
+    const onProviderActivated = vi.fn();
+
+    const sendCommand = vi.fn().mockImplementation((method: string) => {
+      if (method === "config.providers.list") {
+        return Promise.resolve({ providers: mockProviders, activeProviderId: null });
+      }
+      if (method === "config.update") {
+        return Promise.resolve({
+          ok: true,
+          activeProviderId: "p1",
+          models: ["ff/muse-spark-1.2-contributor", "ff/big-pickle"],
+          defaultModel: "ff/muse-spark-1.2-contributor"
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    render(
+      createElement(ApiSettingsModal, {
+        onClose: vi.fn(),
+        sendCommand,
+        onProviderActivated,
+      })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Custom API")).toBeInTheDocument();
+    });
+
+    const activateBtn = screen.getByRole("button", { name: /use this provider/i });
+    fireEvent.click(activateBtn);
+
+    await waitFor(() => {
+      expect(onProviderActivated).toHaveBeenCalledWith({
+        ok: true,
+        activeProviderId: "p1",
+        models: ["ff/muse-spark-1.2-contributor", "ff/big-pickle"],
+        defaultModel: "ff/muse-spark-1.2-contributor"
+      });
+    });
+  });
 });

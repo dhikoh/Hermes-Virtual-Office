@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.3] - 2026-10-09
+
+### Added
+- Real-time model catalog refresh when activating API Provider profiles via `ApiSettingsModal`.
+- `onProviderActivated` callback propagation connecting `ApiSettingsModal.tsx` to `OfficeScreen.tsx`, dynamically refreshing model choices in the Chat Panel without page reloads.
+- Automatic agent model migration in `OfficeScreen.tsx` that replaces obsolete models with the new provider's default model whenever the active provider changes.
+- Persistent `HERMES_MODEL` synchronization to `.env` upon provider profile activation.
+- Dedicated unit test in `tests/unit/apiSettingsModal.test.ts` verifying `onProviderActivated` lifecycle and data delivery.
+
+### Fixed
+- Fixed obsolete fallback model lingering in chat headers when switching away from default providers.
+- Corrected `GatewayModelChoice` provider type mapping in `OfficeScreen.tsx`.
+
 ## [1.0.2] - 2026-10-09
 
 ### Added

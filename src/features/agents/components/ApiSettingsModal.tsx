@@ -13,6 +13,7 @@ type ApiSettingsModalProps = {
   onClose: () => void;
   client?: { call: <T = any>(method: string, params?: Record<string, unknown>) => Promise<T> } | null;
   sendCommand?: <T = any>(method: string, params?: Record<string, unknown>) => Promise<T>;
+  onProviderActivated?: (info?: { models?: string[]; defaultModel?: string; providerId?: string }) => void;
 };
 
 export function sanitizeProviderBaseUrl(url: string): string {
@@ -25,7 +26,7 @@ export function sanitizeProviderBaseUrl(url: string): string {
   return clean;
 }
 
-export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand }: ApiSettingsModalProps) => {
+export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand, onProviderActivated }: ApiSettingsModalProps) => {
   const gateway = useGateway();
   const sendCommand = propSendCommand || (client ? <T = any>(method: string, params: Record<string, unknown> = {}) => client.call<T>(method, params) : gateway.sendCommand);
   
@@ -165,6 +166,7 @@ export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand
       if (res.ok) {
         if (editingId) setActiveProviderId(editingId);
         setActiveMessage("This provider is now ACTIVE!");
+        onProviderActivated?.(res);
       }
     } catch (err) {
       console.error(err);

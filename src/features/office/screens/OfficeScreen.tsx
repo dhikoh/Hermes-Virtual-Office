@@ -2789,32 +2789,61 @@ export function OfficeScreen({
     setQaTestingAgentId(null);
   }, [qaTestingAgentId, state.agents]);
 
-  useEffect(() => {
-    if (status !== "connected") return;
-    if (!runtimeSupportsModels) return;
-    let cancelled = false;
-    void (async () => {
+  const refreshGatewayModels = useCallback(
+    async (forcedModelList?: string[], forcedDefaultModel?: string) => {
+      if (status !== "connected" || !runtimeSupportsModels) return;
       try {
-        const result = await provider.call<{ models: GatewayModelChoice[] }>(
-          "models.list",
-          {},
-        );
-        if (!cancelled) {
-          setGatewayModels(
-            buildGatewayModelChoices(
-              Array.isArray(result.models) ? result.models : [],
-              null,
-            ),
+        let rawModels: GatewayModelChoice[] = [];
+        if (Array.isArray(forcedModelList) && forcedModelList.length > 0) {
+          rawModels = forcedModelList.map((id) => {
+            const parts = id.split("/");
+            const providerName = parts.length > 1 ? parts[0] : "custom";
+            return { id, name: id, provider: providerName };
+          });
+        } else {
+          const result = await provider.call<{ models: GatewayModelChoice[] }>(
+            "models.list",
+            {},
           );
+          rawModels = Array.isArray(result.models) ? result.models : [];
         }
-      } catch {
+
+        const choices = buildGatewayModelChoices(rawModels, null);
+        setGatewayModels(choices);
+
+        const defaultChoice =
+          forcedDefaultModel ||
+          rawModels[0]?.id ||
+          "";
+
+        if (defaultChoice) {
+          const validIds = new Set(rawModels.map((m) => m.id));
+          for (const agent of stateRef.current.agents) {
+            const currentModelId = agent.model?.includes("/")
+              ? agent.model.split("/").slice(1).join("/")
+              : agent.model;
+            const isValid =
+              agent.model &&
+              (validIds.has(agent.model) || (currentModelId && validIds.has(currentModelId)));
+            if (!isValid) {
+              dispatch({
+                type: "updateAgent",
+                agentId: agent.agentId,
+                patch: { model: defaultChoice },
+              });
+            }
+          }
+        }
+      } catch (err) {
         // Models are optional - chat still works without model selection.
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [status, provider, runtimeSupportsModels]);
+    },
+    [dispatch, provider, runtimeSupportsModels, status],
+  );
+
+  useEffect(() => {
+    void refreshGatewayModels();
+  }, [refreshGatewayModels]);
 
   useEffect(() => {
     if (chatOpen && !selectedChatAgentId && state.agents.length > 0) {
@@ -5479,6 +5508,9 @@ export function OfficeScreen({
           <ApiSettingsModal
             onClose={() => setApiSettingsModalOpen(false)}
             client={client}
+            onProviderActivated={(info) => {
+              void refreshGatewayModels(info?.models, info?.defaultModel);
+            }}
           />
         ) : null}
 
