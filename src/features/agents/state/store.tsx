@@ -80,7 +80,7 @@ export type AgentState = AgentStoreSeed & {
 
 export const buildNewSessionAgentPatch = (agent: AgentState): Partial<AgentState> => {
   return {
-    sessionKey: agent.sessionKey,
+    sessionKey: `agent:${agent.agentId}:${Date.now()}`,
     status: "idle",
     runId: null,
     runStartedAt: null,

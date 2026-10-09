@@ -369,7 +369,6 @@ export function useChatInteractionController(
         if (newSessionIntent.kind === "deny") {
           throw new Error(newSessionIntent.message);
         }
-        await params.client.call("sessions.reset", { key: newSessionIntent.sessionKey });
         const patch = buildNewSessionAgentPatch(agent);
         params.clearRunTracking(agent.runId);
         params.clearHistoryInFlight(newSessionIntent.sessionKey);

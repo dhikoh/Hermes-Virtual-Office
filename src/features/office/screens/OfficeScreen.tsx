@@ -61,6 +61,11 @@ import {
   isHeartbeatPrompt,
   stripUiMetadata,
 } from "@/lib/text/message-extract";
+import { AgentAvatarCreatorModal } from "@/features/agents/components/AgentAvatarCreatorModal";
+import { SessionHistoryModal } from "@/features/agents/components/SessionHistoryModal";
+import { type BaseEventFrame } from "@/lib/gateway/types";
+import { buildNewSessionAgentPatch } from "@/features/agents/state/store";
+
 import { resolveOfficeIntentSnapshot } from "@/lib/office/deskDirectives";
 import { AgentChatPanel } from "@/features/agents/components/AgentChatPanel";
 import {
@@ -1021,6 +1026,7 @@ export function OfficeScreen({
   const [selectedChatAgentId, setSelectedChatAgentId] = useState<string | null>(
     null,
   );
+  const [sessionHistoryModalOpen, setSessionHistoryModalOpen] = useState(false);
   const [remoteChatByAgentId, setRemoteChatByAgentId] = useState<
     Record<string, RemoteChatSessionState>
   >({});
@@ -2834,6 +2840,20 @@ export function OfficeScreen({
     setInspectSidebarNull: () => {},
     setMobilePaneChat: () => {},
   });
+
+  const handleSessionSwitch = useCallback((agentId: string, sessionKey: string) => {
+    const agent = stateRef.current.agents.find(a => a.agentId === agentId);
+    if (!agent) return;
+    
+    dispatch({
+      type: "updateAgent",
+      agentId,
+      patch: {
+        ...buildNewSessionAgentPatch(agent),
+        sessionKey,
+      }
+    });
+  }, [dispatch]);
 
   const focusedChatAgent = selectedChatAgentId
     ? (state.agents.find((agent) => agent.agentId === selectedChatAgentId) ??
@@ -5334,6 +5354,7 @@ export function OfficeScreen({
                   onNewSession={() =>
                     chatController.handleNewSession(focusedChatAgent.agentId)
                   }
+                  onOpenSessionHistory={() => setSessionHistoryModalOpen(true)}
                   onModelChange={(value) =>
                     dispatch({
                       type: "updateAgent",
@@ -5439,6 +5460,19 @@ export function OfficeScreen({
             </div>
           </div>
         )}
+
+        {sessionHistoryModalOpen && focusedChatAgent ? (
+          <SessionHistoryModal
+            open={sessionHistoryModalOpen}
+            agentId={focusedChatAgent.agentId}
+            client={client}
+            onClose={() => setSessionHistoryModalOpen(false)}
+            onSelectSession={(sessionKey) => {
+              handleSessionSwitch(focusedChatAgent.agentId, sessionKey);
+              setSessionHistoryModalOpen(false);
+            }}
+          />
+        ) : null}
 
         <button
           type="button"

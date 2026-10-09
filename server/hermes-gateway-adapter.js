@@ -56,8 +56,8 @@ function loadRuntimeEnv() {
 
 loadRuntimeEnv();
 
-const HERMES_API_URL = (process.env.HERMES_API_URL || "http://localhost:8642").replace(/\/$/, "");
-const HERMES_API_KEY = process.env.HERMES_API_KEY || "";
+let HERMES_API_URL = (process.env.HERMES_API_URL || "http://localhost:8642").replace(/\/$/, "");
+let HERMES_API_KEY = process.env.HERMES_API_KEY || "";
 const ADAPTER_PORT = parseInt(process.env.HERMES_ADAPTER_PORT || "18789", 10);
 const HERMES_MODEL = process.env.HERMES_MODEL || "hermes";
 const HERMES_AGENT_NAME = process.env.HERMES_AGENT_NAME || "Hermes";
@@ -899,19 +899,47 @@ async function handleMethod(method, params, id, sendEvent) {
     // --- Sessions -----------------------------------------------------------
 
     case "sessions.list": {
-      const sessions = [...agentRegistry.values()].map((agent) => {
-        const sessionKey = `agent:${agent.id}:${MAIN_KEY}`;
-        const history = getHistory(sessionKey);
+      const sessions = [];
+      for (const [sessionKey, history] of conversationHistory.entries()) {
+        if (!sessionKey.startsWith("agent:")) continue;
+        const parts = sessionKey.split(":");
+        const agentId = parts[1];
+        const sessionId = parts.slice(2).join(":");
+        const agent = agentRegistry.get(agentId);
+        if (!agent) continue;
         const settings = sessionSettings.get(sessionKey) || {};
-        return {
-          key: sessionKey, agentId: agent.id,
-          updatedAt: history.length > 0 ? Date.now() : null,
-          displayName: "Main",
+        
+        let lastTimestamp = Date.now();
+        if (history.length > 0) {
+           const lastMsg = history[history.length - 1];
+           if (lastMsg && lastMsg.timestamp) lastTimestamp = lastMsg.timestamp;
+        }
+
+        sessions.push({
+          key: sessionKey, agentId: agentId,
+          updatedAt: history.length > 0 ? lastTimestamp : null,
+          displayName: sessionId === MAIN_KEY ? "Main" : sessionId,
           origin: { label: agent.name, provider: "hermes" },
           model: settings.model || agent.settings?.model || HERMES_MODEL,
           modelProvider: "hermes",
-        };
-      });
+        });
+      }
+      
+      for (const agent of agentRegistry.values()) {
+        const mainSessionKey = `agent:${agent.id}:${MAIN_KEY}`;
+        if (!sessions.find(s => s.key === mainSessionKey)) {
+          const settings = sessionSettings.get(mainSessionKey) || {};
+          sessions.push({
+            key: mainSessionKey, agentId: agent.id,
+            updatedAt: null,
+            displayName: "Main",
+            origin: { label: agent.name, provider: "hermes" },
+            model: settings.model || agent.settings?.model || HERMES_MODEL,
+            modelProvider: "hermes",
+          });
+        }
+      }
+      
       return resOk(id, { sessions });
     }
 
@@ -1104,6 +1132,139 @@ async function handleMethod(method, params, id, sendEvent) {
 
     case "tasks.list":
       return resOk(id, { tasks: [] });
+
+    // --- Config Update ------------------------------------------------------
+
+    case "config.providers.list": {
+      const fs = require("fs");
+      const path = require("path");
+      const providersFile = path.join(process.cwd(), "api_providers.json");
+      let list = [];
+      try {
+        if (fs.existsSync(providersFile)) {
+          list = JSON.parse(fs.readFileSync(providersFile, "utf8"));
+        } else {
+          list = [{ id: "default", name: "OpenRouter", url: "https://openrouter.ai/api", key: "" }];
+          fs.writeFileSync(providersFile, JSON.stringify(list, null, 2));
+        }
+      } catch (err) {}
+      return resOk(id, { providers: list });
+    }
+
+    case "config.providers.save": {
+      const fs = require("fs");
+      const path = require("path");
+      const providersFile = path.join(process.cwd(), "api_providers.json");
+      let list = [];
+      try {
+        if (fs.existsSync(providersFile)) list = JSON.parse(fs.readFileSync(providersFile, "utf8"));
+      } catch (err) {}
+      
+      const newProv = p.provider;
+      if (!newProv || !newProv.id) return resOk(id, { ok: false });
+      
+      const idx = list.findIndex(x => x.id === newProv.id);
+      if (idx >= 0) list[idx] = newProv;
+      else list.push(newProv);
+      
+      try { fs.writeFileSync(providersFile, JSON.stringify(list, null, 2)); } catch (err) {}
+      return resOk(id, { ok: true, providers: list });
+    }
+
+    case "config.providers.delete": {
+      const fs = require("fs");
+      const path = require("path");
+      const providersFile = path.join(process.cwd(), "api_providers.json");
+      let list = [];
+      try {
+        if (fs.existsSync(providersFile)) list = JSON.parse(fs.readFileSync(providersFile, "utf8"));
+      } catch (err) {}
+      
+      list = list.filter(x => x.id !== p.providerId);
+      try { fs.writeFileSync(providersFile, JSON.stringify(list, null, 2)); } catch (err) {}
+      return resOk(id, { ok: true, providers: list });
+    }
+
+    case "config.update": {
+      let updated = false;
+      const apiUrl = p.apiUrl;
+      const apiKey = p.apiKey;
+      if (typeof apiUrl === "string") {
+        HERMES_API_URL = apiUrl.replace(/\/$/, "");
+        process.env.HERMES_API_URL = HERMES_API_URL;
+        updated = true;
+      }
+      if (typeof apiKey === "string") {
+        HERMES_API_KEY = apiKey;
+        process.env.HERMES_API_KEY = apiKey;
+        updated = true;
+      }
+      if (updated) {
+        cachedHermesModels = null;
+        cachedHermesModelsAt = 0;
+        try {
+          const envPath = require("path").join(process.cwd(), ".env");
+          let envContent = require("fs").readFileSync(envPath, "utf8");
+          if (typeof apiUrl === "string") {
+            if (envContent.includes("HERMES_API_URL=")) {
+              envContent = envContent.replace(/HERMES_API_URL=.*(\r?\n|$)/, `HERMES_API_URL=${apiUrl}$1`);
+            } else {
+              envContent += `\nHERMES_API_URL=${apiUrl}\n`;
+            }
+          }
+          if (typeof apiKey === "string") {
+            if (envContent.includes("HERMES_API_KEY=")) {
+              envContent = envContent.replace(/HERMES_API_KEY=.*(\r?\n|$)/, `HERMES_API_KEY=${apiKey}$1`);
+            } else {
+              envContent += `\nHERMES_API_KEY=${apiKey}\n`;
+            }
+          }
+          require("fs").writeFileSync(envPath, envContent, "utf8");
+        } catch(err) {
+          console.error("[hermes-adapter] Failed to update .env", err);
+        }
+      }
+      return resOk(id, { ok: true });
+    }
+
+    case "config.test": {
+      const apiUrl = (p.apiUrl || HERMES_API_URL).replace(/\/$/, "");
+      const apiKey = p.apiKey !== undefined ? p.apiKey : HERMES_API_KEY;
+      
+      try {
+        const urlStr = apiUrl + "/v1/models";
+        const fetchMethod = typeof fetch !== 'undefined' ? fetch : async (url, opts) => {
+          return new Promise((resolve, reject) => {
+            const parsed = new URL(url);
+            const transport = parsed.protocol === "https:" ? https : http;
+            const req = transport.request(
+              { hostname: parsed.hostname, port: parsed.port, path: parsed.pathname + parsed.search, method: "GET", headers: opts.headers },
+              (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, json: async () => JSON.parse(data), status: res.statusCode }));
+              }
+            );
+            req.on("error", reject);
+            req.end();
+          });
+        };
+
+        const res = await fetchMethod(urlStr, {
+          headers: apiKey ? { "Authorization": `Bearer ${apiKey}` } : {}
+        });
+
+        if (!res.ok) {
+          return resOk(id, { success: false, error: `HTTP ${res.status} from API` });
+        }
+
+        const payload = await res.json();
+        const models = Array.isArray(payload?.data) ? payload.data : [];
+        return resOk(id, { success: true, count: models.length });
+      } catch (err) {
+        return resOk(id, { success: false, error: err.message });
+      }
+    }
 
     // --- Cron jobs ----------------------------------------------------------
 

@@ -11,9 +11,11 @@ import {
 } from "@/features/agents/components/AgentInspectPanels";
 import { FleetSidebar } from "@/features/agents/components/FleetSidebar";
 import { HeaderBar } from "@/features/agents/components/HeaderBar";
+import { ApiSettingsModal } from "@/features/agents/components/ApiSettingsModal";
 import { ConnectionPanel } from "@/features/agents/components/ConnectionPanel";
 import { GatewayConnectScreen } from "@/features/agents/components/GatewayConnectScreen";
 import { EmptyStatePanel } from "@/features/agents/components/EmptyStatePanel";
+import { SessionHistoryModal } from "@/features/agents/components/SessionHistoryModal";
 import {
   isHeartbeatPrompt,
 } from "@/lib/text/message-extract";
@@ -28,6 +30,7 @@ import {
   type FocusFilter,
   useAgentStore,
 } from "@/features/agents/state/store";
+import { buildNewSessionAgentPatch } from "@/features/agents/state/store";
 import type { AgentState } from "@/features/agents/state/store";
 import { createGatewayRuntimeEventHandler } from "@/features/agents/state/gatewayRuntimeEventHandler";
 import {
@@ -204,6 +207,7 @@ const AgentsPageScreen = () => {
 
   const { state, dispatch, hydrateAgents, setError, setLoading } = useAgentStore();
   const [showConnectionPanel, setShowConnectionPanel] = useState(false);
+  const [showApiSettings, setShowApiSettings] = useState(false);
   const [focusFilter, setFocusFilter] = useState<FocusFilter>("all");
   const [focusedPreferencesLoaded, setFocusedPreferencesLoaded] = useState(false);
   const [agentsLoadedOnce, setAgentsLoadedOnce] = useState(false);
@@ -793,6 +797,26 @@ const AgentsPageScreen = () => {
       setMobilePane("chat");
     },
   });
+
+  const handleSessionSwitch = useCallback((agentId: string, sessionKey: string) => {
+    const agent = stateRef.current.agents.find(a => a.agentId === agentId);
+    if (!agent) return;
+    
+    runtimeEventHandlerRef.current?.clearRunTracking(agent.runId);
+    clearHistoryInFlight(sessionKey);
+    specialUpdateRef.current.delete(agentId);
+    specialLatestUpdate.clearInFlight(agentId);
+    
+    dispatch({
+      type: "updateAgent",
+      agentId,
+      patch: {
+        ...buildNewSessionAgentPatch(agent),
+        sessionKey,
+      }
+    });
+  }, [dispatch, clearHistoryInFlight]);
+
   useFinalizedAssistantReplyListener(state.agents, ({ text }) => {
     if (!voiceRepliesLoaded || !voiceRepliesEnabled) return;
     enqueueVoiceReply({
@@ -1332,6 +1356,7 @@ const AgentsPageScreen = () => {
           <HeaderBar
             status={status}
             onConnectionSettings={() => setShowConnectionPanel(true)}
+            onApiSettings={() => setShowApiSettings(true)}
           />
           <div className="flex min-h-0 flex-1 flex-col gap-4 px-3 pb-3 pt-3 sm:px-4 sm:pb-4 sm:pt-4 md:px-6 md:pb-6 md:pt-4">
             {settingsRouteActive ? (
@@ -1416,6 +1441,7 @@ const AgentsPageScreen = () => {
         <HeaderBar
           status={status}
           onConnectionSettings={() => setShowConnectionPanel(true)}
+          onApiSettings={() => setShowApiSettings(true)}
         />
         <div className="flex min-h-0 flex-1 flex-col gap-3 px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3 md:px-5 md:pb-5 md:pt-3">
           {connectionPanelVisible ? (
@@ -1702,6 +1728,7 @@ const AgentsPageScreen = () => {
                           settingsMutationController.handleRenameAgent(focusedAgent.agentId, name)
                         }
                         onNewSession={() => handleNewSession(focusedAgent.agentId)}
+                        onOpenSessionHistory={() => setSessionHistoryModalOpen(true)}
                         onModelChange={(value) =>
                           handleModelChange(focusedAgent.agentId, focusedAgent.sessionKey, value)
                         }
@@ -1784,6 +1811,18 @@ const AgentsPageScreen = () => {
           }}
         />
       ) : null}
+      {sessionHistoryModalOpen && focusedAgent ? (
+        <SessionHistoryModal
+          open={sessionHistoryModalOpen}
+          agentId={focusedAgent.agentId}
+          client={provider}
+          onClose={() => setSessionHistoryModalOpen(false)}
+          onSelectSession={(sessionKey) => {
+            handleSessionSwitch(focusedAgent.agentId, sessionKey);
+            setSessionHistoryModalOpen(false);
+          }}
+        />
+      ) : null}
       {createAgentBlock && createAgentBlock.phase !== "queued" ? (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80"
@@ -1835,6 +1874,10 @@ const AgentsPageScreen = () => {
             ) : null}
           </div>
         </div>
+      ) : null}
+      
+      {showApiSettings ? (
+        <ApiSettingsModal onClose={() => setShowApiSettings(false)} />
       ) : null}
     </div>
   );

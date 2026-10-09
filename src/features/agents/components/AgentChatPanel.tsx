@@ -136,6 +136,7 @@ type AgentChatPanelProps = {
   stopDisabledReason?: string | null;
   onLoadMoreHistory: () => void;
   onOpenSettings?: () => void;
+  onOpenSessionHistory?: () => void;
   onRename?: (name: string) => Promise<boolean>;
   onNewSession?: () => Promise<void> | void;
   onModelChange: (value: string | null) => void;
@@ -891,6 +892,7 @@ const AgentChatComposer = memo(function AgentChatComposer({
   value,
   onChange,
   onKeyDown,
+  onPaste,
   onSend,
   onAttachmentFiles,
   attachments,
@@ -925,6 +927,7 @@ const AgentChatComposer = memo(function AgentChatComposer({
   value: string;
   onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onPaste?: (event: React.ClipboardEvent<HTMLTextAreaElement>) => void;
   onSend: () => void;
   onAttachmentFiles: (event: ChangeEvent<HTMLInputElement>) => void;
   attachments: UploadAttachment[];
@@ -1209,6 +1212,7 @@ const AgentChatComposer = memo(function AgentChatComposer({
             className="chat-composer-input min-h-[64px] flex-1 resize-none border-0 bg-transparent px-0 py-1 text-[15px] leading-6 text-foreground outline-none shadow-none transition placeholder:text-muted-foreground/65 focus:outline-none focus-visible:outline-none focus-visible:ring-0"
             onChange={onChange}
             onKeyDown={onKeyDown}
+            onPaste={onPaste}
             placeholder="type a message"
           />
           <button
@@ -1280,6 +1284,7 @@ export const AgentChatPanel = ({
   stopDisabledReason = null,
   onLoadMoreHistory,
   onOpenSettings,
+  onOpenSessionHistory,
   onRename,
   onNewSession,
   onModelChange,
@@ -1541,6 +1546,69 @@ export const AgentChatPanel = ({
     []
   );
 
+  const handlePaste = useCallback(
+    async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const items = event.clipboardData?.items;
+      if (!items) return;
+      const files: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.indexOf("image") !== -1) {
+          const file = item.getAsFile();
+          if (file) files.push(file);
+        }
+      }
+      if (files.length === 0) return;
+      
+      const oversized = files.filter((file) => file.size > MAX_UPLOAD_BYTES);
+      const supported = files.filter((file) => file.size <= MAX_UPLOAD_BYTES);
+      if (supported.length === 0) {
+        setAttachmentStatus("All pasted files exceeded the 10 MB upload limit.");
+        return;
+      }
+      try {
+        const uploaded = await Promise.all(
+          supported.map(async (file) => {
+            const formData = new FormData();
+            formData.append("file", file);
+            const response = await fetch("/api/files/upload", {
+              method: "POST",
+              body: formData,
+            });
+            const payload = (await response.json()) as Record<string, unknown>;
+            if (!response.ok) {
+              const message =
+                typeof payload.error === "string"
+                  ? payload.error
+                  : `Failed to upload pasted image.`;
+              throw new Error(message);
+            }
+            return {
+              id: String(payload.id ?? ""),
+              name: String(payload.name ?? file.name),
+              url: String(payload.url ?? ""),
+              contentType: String(payload.contentType ?? file.type ?? "application/octet-stream"),
+              extractedText:
+                typeof payload.extractedText === "string" ? payload.extractedText : undefined,
+            } satisfies UploadAttachment;
+          })
+        );
+        setAttachments((current) => [...current, ...uploaded]);
+        const statusParts = [`Uploaded ${uploaded.length} pasted file${uploaded.length === 1 ? "" : "s"}.`];
+        if (oversized.length > 0) {
+          statusParts.push(`${oversized.length} oversized file${oversized.length === 1 ? "" : "s"} skipped.`);
+        }
+        setAttachmentStatus(statusParts.join(" "));
+        scrollToBottomNextOutputRef.current = true;
+      } catch (error) {
+        setAttachmentStatus(
+          error instanceof Error ? error.message : "Failed to read pasted attachments."
+        );
+      }
+    },
+    []
+  );
+
   const handleRemoveAttachment = useCallback((id: string) => {
     setAttachments((current) => current.filter((attachment) => attachment.id !== id));
   }, []);
@@ -1747,6 +1815,18 @@ export const AgentChatPanel = ({
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
             ) : null}
+            {onOpenSessionHistory ? (
+              <button
+                className="nodrag inline-flex items-center whitespace-nowrap rounded border border-border/70 bg-surface-3 px-2 py-0.5 font-mono text-[9px] font-medium tracking-[0.02em] text-white transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                data-testid="agent-session-history-toggle"
+                aria-label="View session history"
+                title="View session history"
+                onClick={onOpenSessionHistory}
+              >
+                History
+              </button>
+            ) : null}
             <button
               className="nodrag inline-flex items-center whitespace-nowrap rounded border border-[color:var(--status-approval-border)] bg-[color:var(--status-approval-bg)] px-2 py-0.5 font-mono text-[9px] font-medium tracking-[0.02em] text-white transition hover:bg-[color:var(--status-approval-bg)] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
               type="button"
@@ -1796,6 +1876,7 @@ export const AgentChatPanel = ({
             inputRef={handleDraftRef}
             onChange={handleComposerChange}
             onKeyDown={handleComposerKeyDown}
+            onPaste={handlePaste}
             onSend={handleComposerSend}
             onAttachmentFiles={handleAttachmentFiles}
             attachments={attachments}
