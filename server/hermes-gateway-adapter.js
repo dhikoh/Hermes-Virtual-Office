@@ -305,8 +305,18 @@ function redactSecrets(value) {
 // Hermes HTTP API helpers
 // ---------------------------------------------------------------------------
 
+function resolveHermesBaseUrl(url) {
+  let base = (url || "").trim().replace(/\/+$/, "");
+  base = base.replace(/\/chat\/completions\/?$/, "");
+  base = base.replace(/\/models\/?$/, "");
+  while (base.endsWith("/v1/v1")) {
+    base = base.slice(0, -3);
+  }
+  return base;
+}
+
 function resolveHermesEndpoint(baseUrl, endpointPath) {
-  let base = (baseUrl || "").trim().replace(/\/+$/, "");
+  const base = resolveHermesBaseUrl(baseUrl);
   const endpoint = endpointPath.startsWith("/") ? endpointPath : `/${endpointPath}`;
   if (base.endsWith("/v1") && endpoint.startsWith("/v1/")) {
     return `${base}${endpoint.slice(3)}`;
@@ -1200,7 +1210,7 @@ async function handleMethod(method, params, id, sendEvent) {
       const apiUrl = p.apiUrl;
       const apiKey = p.apiKey;
       if (typeof apiUrl === "string") {
-        HERMES_API_URL = apiUrl.replace(/\/$/, "");
+        HERMES_API_URL = resolveHermesBaseUrl(apiUrl);
         process.env.HERMES_API_URL = HERMES_API_URL;
         updated = true;
       }
@@ -1217,9 +1227,9 @@ async function handleMethod(method, params, id, sendEvent) {
           let envContent = require("fs").readFileSync(envPath, "utf8");
           if (typeof apiUrl === "string") {
             if (envContent.includes("HERMES_API_URL=")) {
-              envContent = envContent.replace(/HERMES_API_URL=.*(\r?\n|$)/, `HERMES_API_URL=${apiUrl}$1`);
+              envContent = envContent.replace(/HERMES_API_URL=.*(\r?\n|$)/, `HERMES_API_URL=${HERMES_API_URL}$1`);
             } else {
-              envContent += `\nHERMES_API_URL=${apiUrl}\n`;
+              envContent += `\nHERMES_API_URL=${HERMES_API_URL}\n`;
             }
           }
           if (typeof apiKey === "string") {
@@ -1454,5 +1464,5 @@ if (require.main === module) {
 
 module.exports = {
   resolveHermesEndpoint,
-  resolveHermesModel,
+  resolveHermesBaseUrl,
 };

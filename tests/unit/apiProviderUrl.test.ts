@@ -33,4 +33,19 @@ describe("API Provider URL normalization (Fix /v1/v1/models)", () => {
     const result = resolveHermesEndpoint("http://localhost:11434/v1", "/v1/models");
     expect(result).toBe("http://localhost:11434/v1/models");
   });
+
+  it("handles duplicate /v1/v1/models in baseUrl", () => {
+    const result = resolveHermesEndpoint("https://api.trustisgold.web.id/v1/v1/models", "/v1/models");
+    expect(result).toBe("https://api.trustisgold.web.id/v1/models");
+  });
+
+  it("handles /v1/models provided as baseUrl", () => {
+    const result = resolveHermesEndpoint("https://api.trustisgold.web.id/v1/models", "/v1/models");
+    expect(result).toBe("https://api.trustisgold.web.id/v1/models");
+  });
+
+  it("handles /v1/chat/completions provided as baseUrl", () => {
+    const result = resolveHermesEndpoint("https://api.trustisgold.web.id/v1/chat/completions", "/v1/chat/completions");
+    expect(result).toBe("https://api.trustisgold.web.id/v1/chat/completions");
+  });
 });

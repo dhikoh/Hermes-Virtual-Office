@@ -93,3 +93,7 @@ screenshots-*/
 # Bytecode from the bundled Python plugin.
 __pycache__/
 *.pyc
+
+# Local API provider credentials
+api_providers.json
+

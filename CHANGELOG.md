@@ -9,7 +9,8 @@
 
 ### Fixed
 - Resolved "New Session" issue where starting a new session cleared existing conversation history; now generates unique timestamped session keys (`agent:<id>:<timestamp>`).
-- Added robust URL endpoint normalization in `hermes-gateway-adapter.js` preventing duplicate `/v1/v1/models` and `/v1/v1/chat/completions` across diverse provider URL shapes.
+- Added robust URL endpoint normalization in both `ApiSettingsModal.tsx` and `hermes-gateway-adapter.js`, automatically stripping trailing `/models`, `/chat/completions`, and repeated `/v1/v1` loops so any pasted endpoint variation works seamlessly.
+- Added `api_providers.json` to `.gitignore` to safeguard local credentials.
 - Fixed TypeScript compiler errors, declared `SessionListEntry` types, and resolved missing Gateway context imports.
 - Consolidated documentation by removing duplicate spec files in `docs/` and cleaned obsolete root test scripts.
 

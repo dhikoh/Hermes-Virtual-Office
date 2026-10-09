@@ -15,6 +15,16 @@ type ApiSettingsModalProps = {
   sendCommand?: <T = any>(method: string, params?: Record<string, unknown>) => Promise<T>;
 };
 
+export function sanitizeProviderBaseUrl(url: string): string {
+  let clean = (url || "").trim().replace(/\/+$/, "");
+  clean = clean.replace(/\/chat\/completions\/?$/, "");
+  clean = clean.replace(/\/models\/?$/, "");
+  while (clean.endsWith("/v1/v1")) {
+    clean = clean.slice(0, -3);
+  }
+  return clean;
+}
+
 export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand }: ApiSettingsModalProps) => {
   const gateway = useGateway();
   const sendCommand = propSendCommand || (client ? <T = any>(method: string, params: Record<string, unknown> = {}) => client.call<T>(method, params) : gateway.sendCommand);
@@ -84,16 +94,26 @@ export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand
     }
   };
 
+  const normalizeUrl = (raw: string): string => {
+    const cleaned = sanitizeProviderBaseUrl(raw);
+    if (cleaned && cleaned !== raw) {
+      setApiUrl(cleaned);
+      return cleaned;
+    }
+    return raw;
+  };
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     setTestResult(null);
     setActiveMessage("");
     
+    const cleanUrl = normalizeUrl(apiUrl);
     try {
       const provider: Provider = {
         id: editingId || "new_" + Date.now(),
-        name, url: apiUrl, key: apiKey
+        name, url: cleanUrl, key: apiKey
       };
       const res = await sendCommand("config.providers.save", { provider });
       if (res.ok && res.providers) {
@@ -112,8 +132,9 @@ export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand
     setIsTesting(true);
     setTestResult(null);
     setActiveMessage("");
+    const cleanUrl = normalizeUrl(apiUrl);
     try {
-      const res = await sendCommand("config.test", { apiUrl, apiKey });
+      const res = await sendCommand("config.test", { apiUrl: cleanUrl, apiKey });
       if (res.success) {
         setTestResult({ ok: true, message: `Success! Found ${res.count} models.` });
       } else {
@@ -127,8 +148,9 @@ export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand
   };
 
   const handleUseProfile = async () => {
+    const cleanUrl = normalizeUrl(apiUrl);
     try {
-      const res = await sendCommand("config.update", { apiUrl, apiKey });
+      const res = await sendCommand("config.update", { apiUrl: cleanUrl, apiKey });
       if (res.ok) {
         setActiveMessage("This provider is now ACTIVE!");
       }
@@ -205,6 +227,7 @@ export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand
                   type="text"
                   value={apiUrl}
                   onChange={(e) => setApiUrl(e.target.value)}
+                  onBlur={() => normalizeUrl(apiUrl)}
                   placeholder="https://openrouter.ai/api"
                   className="ui-input w-full font-mono text-sm"
                   required
