@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.4] - 2026-10-09
+
+### Added
+- **4-Tier Permission Gate with Deny-Wins** (`server/security/permission-gate.js`): Categorizes operations into Green, Yellow, Red, and Black tiers with absolute protection against sensitive credential leakage (`.env`, `.ssh`, tokens, browser profiles) and path traversal prevention.
+- **Role Capability Matrix** (`server/roles/role-matrix.js`): Strict enforcement of tool and access boundaries for PM, Developer, Researcher, QA, and Writer roles.
+- **Pre-Mutation Snapshot & 1-Click Rollback** (`server/workspace/snapshot-manager.js`): Automated workspace snapshots in `.hermes/snapshots/` before mutations with SHA256 integrity and 1-click restore.
+- **Shell / CLI Execution Tool & Approval Ticket Loop** (`server/execution/shell-executor.js`): Safe CLI runner with 128KB output truncation and interactive approval tickets for Red-tier commands.
+- **Isolated Browser Service & Obsidian Knowledge Vault** (`server/research/browser-service.js`, `server/vault/vault-manager.js`): Cookie-free web researcher and Obsidian Markdown vault with YAML frontmatter under `_AI/`.
+- **Gateway RPCs & Tool Suite**: Integrated 8 new LLM tools and 6 gateway RPCs (`exec.approvals.get`, `exec.approval.resolve`, `workspace.snapshots.list`, `workspace.rollback`, `vault.documents.list`, `roles.matrix.get`) into `server/hermes-gateway-adapter.js`.
+- **UI Approval Flow**: Integrated `pendingExecApprovals` state and approval events in `OfficeScreen.tsx` connecting seamlessly to `AgentChatPanel.tsx` `ExecApprovalCard`.
+- **Automated Verification**: Comprehensive unit test suites (`tests/unit/permissionGate.test.ts`, `tests/unit/snapshotManager.test.ts`, `tests/unit/shellExecutor.test.ts`, `tests/unit/vaultAndBrowser.test.ts`, `tests/unit/gatewayNewCapabilities.test.ts`).
+
 ## [1.0.3] - 2026-10-09
 
 ### Added

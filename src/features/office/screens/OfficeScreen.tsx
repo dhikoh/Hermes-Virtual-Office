@@ -133,6 +133,7 @@ import {
 } from "@/lib/agents/personalityBuilder";
 import { writeGatewayAgentFiles } from "@/lib/gateway/agentFiles";
 import { randomUUID } from "@/lib/uuid";
+import type { PendingExecApproval, ExecApprovalDecision } from "@/features/agents/approvals/types";
 import {
   HQSidebar,
   type HQSidebarTab,
@@ -1074,6 +1075,7 @@ export function OfficeScreen({
   // The office has a single floor — Hermes.
   const activeFloorId = DEFAULT_ACTIVE_FLOOR_ID;
   const [gatewayModels, setGatewayModels] = useState<GatewayModelChoice[]>([]);
+  const [pendingExecApprovals, setPendingExecApprovals] = useState<PendingExecApproval[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [marketplaceOpen, setMarketplaceOpen] = useState(false);
   // Office renderer preference (3D immersive vs. 2D pixel). Resolved after
@@ -2636,6 +2638,15 @@ export function OfficeScreen({
         return next.slice(-MAX_HERMES_LOG_ENTRIES);
       });
       refreshRecentTransportSessionHistory(event);
+      if (event.event === "exec.approval.requested" && event.payload) {
+        const payload = event.payload as unknown as PendingExecApproval;
+        if (payload && payload.id) {
+          setPendingExecApprovals((prev) => {
+            if (prev.some((p) => p.id === payload.id)) return prev;
+            return [...prev, payload];
+          });
+        }
+      }
       setOfficeTriggerState((previous) =>
         reduceOfficeAnimationTriggerEvent({
           state: previous,
@@ -2844,6 +2855,18 @@ export function OfficeScreen({
   useEffect(() => {
     void refreshGatewayModels();
   }, [refreshGatewayModels]);
+
+  const handleResolveExecApproval = useCallback(
+    async (id: string, decision: ExecApprovalDecision) => {
+      setPendingExecApprovals((prev) => prev.filter((p) => p.id !== id));
+      try {
+        await client?.call("exec.approval.resolve", { id, decision });
+      } catch (err) {
+        console.error("Failed to resolve approval:", err);
+      }
+    },
+    [client],
+  );
 
   useEffect(() => {
     if (chatOpen && !selectedChatAgentId && state.agents.length > 0) {
@@ -5428,6 +5451,8 @@ export function OfficeScreen({
                     openAgentEditor(focusedChatAgent.agentId, "avatar")
                   }
                   onVoiceSend={handleVoiceSend}
+                  pendingExecApprovals={pendingExecApprovals.filter(p => !focusedChatAgent || p.agentId === focusedChatAgent.agentId)}
+                  onResolveExecApproval={handleResolveExecApproval}
                 />
               ) : focusedRemoteChatTarget && focusedRemoteChatState ? (
                 <RemoteAgentChatPanel

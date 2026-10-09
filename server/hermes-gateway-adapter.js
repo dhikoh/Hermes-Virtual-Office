@@ -27,6 +27,12 @@ const fs = require("fs");
 const path = require("path");
 const { WebSocketServer } = require("ws");
 
+const { ROLE_DEFINITIONS, validateRoleAction } = require("./roles/role-matrix");
+const { createSnapshot, listSnapshots, rollbackSnapshot } = require("./workspace/snapshot-manager");
+const { executeShellCommand, resolvePendingApproval, getPendingApprovals } = require("./execution/shell-executor");
+const { listVaultDocuments } = require("./vault/vault-manager");
+const { fetchIsolatedPage, saveResearchToVault } = require("./research/browser-service");
+
 function loadDotenvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
   const content = fs.readFileSync(filePath, "utf8");
@@ -189,6 +195,111 @@ const TEAM_TOOLS = [
         properties: {
           agent_id: { type: "string", description: "ID of the agent whose context you want to read" },
           last_n: { type: "number", description: "How many recent messages to return (default 10, max 40)" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "workspace_map",
+      description: "Inspect the project workspace file tree (relative paths and sizes only, no file content). Allowed for PM, Developer, and QA.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_file",
+      description: "Read file contents from workspace. Protected by Role Matrix and Permission Gate (blocks .env/secrets).",
+      parameters: {
+        type: "object",
+        required: ["file_path"],
+        properties: {
+          file_path: { type: "string", description: "Relative path to file in workspace" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "write_file",
+      description: "Write or update a file in the workspace. Automatically creates a pre-mutation snapshot for 1-click rollback.",
+      parameters: {
+        type: "object",
+        required: ["file_path", "content"],
+        properties: {
+          file_path: { type: "string", description: "Relative path to file in workspace" },
+          content: { type: "string", description: "New file content to write" },
+          description: { type: "string", description: "Short explanation of the change for snapshot logs" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "execute_command",
+      description: "Run a shell command (for Developer and QA). Dangerous/write commands pause for user approval.",
+      parameters: {
+        type: "object",
+        required: ["command"],
+        properties: {
+          command: { type: "string", description: "Shell command to run (e.g. npm test, git status)" },
+          cwd: { type: "string", description: "Optional working directory" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "web_search_and_read",
+      description: "Fetch content from allowlisted web domains for research (Researcher only, isolated without cookies).",
+      parameters: {
+        type: "object",
+        required: ["url"],
+        properties: {
+          url: { type: "string", description: "HTTP/HTTPS URL on allowlisted domain" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "save_research_note",
+      description: "Save research report to the Obsidian Markdown vault (_AI/research/). For Researcher only.",
+      parameters: {
+        type: "object",
+        required: ["topic", "content"],
+        properties: {
+          topic: { type: "string", description: "Title or topic of the research" },
+          content: { type: "string", description: "Markdown body of findings" },
+          sources: { type: "array", items: { type: "string" }, description: "List of source URLs" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_snapshots",
+      description: "List existing workspace rollback snapshots.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "rollback_workspace",
+      description: "Rollback workspace files to a specific snapshot ID in 1 click.",
+      parameters: {
+        type: "object",
+        required: ["snapshot_id"],
+        properties: {
+          snapshot_id: { type: "string", description: "ID of snapshot to restore" },
         },
       },
     },
@@ -825,8 +936,37 @@ function execReadAgentContext(args) {
   });
 }
 
-async function executeToolCall(tc, sendEvent) {
-  console.log(`[hermes-adapter] Tool call: ${tc.name}`, JSON.stringify(tc.args).slice(0, 120));
+function buildWorkspaceMap(root) {
+  const results = [];
+  function walk(dir, depth = 0) {
+    if (depth > 5 || results.length > 250) return;
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const name = entry.name;
+        if (name === "node_modules" || name === ".git" || name === ".hermes" || name === ".next" || name === "dist") continue;
+        const full = path.join(dir, name);
+        const rel = path.relative(root, full).replace(/\\/g, "/");
+        if (entry.isDirectory()) {
+          walk(full, depth + 1);
+        } else if (entry.isFile()) {
+          const stat = fs.statSync(full);
+          results.push({ path: rel, size: stat.size, modified: stat.mtimeMs });
+        }
+      }
+    } catch {}
+  }
+  walk(root);
+  return results;
+}
+
+async function executeToolCall(tc, sendEvent, agentId = AGENT_ID) {
+  const agent = agentRegistry.get(agentId) || { id: agentId, role: "developer", name: "Agent" };
+  const role = (agent.role || "").toLowerCase() || (agentId === AGENT_ID ? "pm" : "developer");
+  const workspaceRoot = process.cwd();
+
+  console.log(`[hermes-adapter] Tool call: ${tc.name} by ${agent.name} (${role})`, JSON.stringify(tc.args).slice(0, 120));
+
   switch (tc.name) {
     case "spawn_agent":          return execSpawnAgent(tc.args, sendEvent);
     case "delegate_task":        return execDelegateTask(tc.args, sendEvent);
@@ -834,7 +974,96 @@ async function executeToolCall(tc, sendEvent) {
     case "configure_agent":      return execConfigureAgent(tc.args);
     case "dismiss_agent":        return execDismissAgent(tc.args);
     case "read_agent_context":   return execReadAgentContext(tc.args);
-    default:                     return JSON.stringify({ ok: false, error: `Unknown tool: ${tc.name}` });
+
+    case "workspace_map": {
+      const check = validateRoleAction(role, "workspace_map");
+      if (!check.allowed) return JSON.stringify({ ok: false, error: check.reason });
+      const map = buildWorkspaceMap(workspaceRoot);
+      return JSON.stringify({ ok: true, file_count: map.length, files: map.slice(0, 100) });
+    }
+
+    case "read_file": {
+      const relPath = tc.args.file_path || "";
+      const fullPath = path.isAbsolute(relPath) ? relPath : path.join(workspaceRoot, relPath);
+      const check = validateRoleAction(role, "read_file", { filePath: fullPath }, workspaceRoot);
+      if (!check.allowed) return JSON.stringify({ ok: false, error: check.reason });
+      if (!fs.existsSync(fullPath)) return JSON.stringify({ ok: false, error: `File not found: ${relPath}` });
+      try {
+        const text = fs.readFileSync(fullPath, "utf8");
+        return JSON.stringify({ ok: true, file_path: relPath, content: text.slice(0, 16000) });
+      } catch (err) {
+        return JSON.stringify({ ok: false, error: err.message });
+      }
+    }
+
+    case "write_file": {
+      const relPath = tc.args.file_path || "";
+      const fullPath = path.isAbsolute(relPath) ? relPath : path.join(workspaceRoot, relPath);
+      const check = validateRoleAction(role, "write_file", { filePath: fullPath }, workspaceRoot);
+      if (!check.allowed) return JSON.stringify({ ok: false, error: check.reason });
+      try {
+        const snapshot = createSnapshot(workspaceRoot, [fullPath], agentId, tc.args.description || `Agent ${agent.name} wrote ${relPath}`);
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        fs.writeFileSync(fullPath, String(tc.args.content || ""), "utf8");
+        return JSON.stringify({ ok: true, file_path: relPath, snapshot_id: snapshot.id });
+      } catch (err) {
+        return JSON.stringify({ ok: false, error: err.message });
+      }
+    }
+
+    case "execute_command": {
+      const cmd = tc.args.command || "";
+      const targetCwd = tc.args.cwd ? (path.isAbsolute(tc.args.cwd) ? tc.args.cwd : path.join(workspaceRoot, tc.args.cwd)) : workspaceRoot;
+      const res = await executeShellCommand(agentId, role, cmd, targetCwd);
+      if (res.status === "pending_approval") {
+        broadcastEvent({
+          type: "event",
+          event: "exec.approval.requested",
+          payload: {
+            id: res.approvalId,
+            agentId,
+            command: res.command,
+            cwd: targetCwd,
+            reason: res.reason,
+          },
+        });
+        return JSON.stringify({ status: "pending_approval", approval_id: res.approvalId, message: "Command paused awaiting human approval in Hermes3D UI" });
+      }
+      return JSON.stringify(res);
+    }
+
+    case "web_search_and_read": {
+      const url = tc.args.url || "";
+      const res = await fetchIsolatedPage(url);
+      return JSON.stringify(res);
+    }
+
+    case "save_research_note": {
+      const topic = tc.args.topic || "Research";
+      const content = tc.args.content || "";
+      const sources = Array.isArray(tc.args.sources) ? tc.args.sources : [];
+      const res = saveResearchToVault(workspaceRoot, topic, content, sources, agent.name || agentId);
+      return JSON.stringify(res);
+    }
+
+    case "list_snapshots": {
+      const list = listSnapshots(workspaceRoot);
+      return JSON.stringify({ ok: true, snapshots: list });
+    }
+
+    case "rollback_workspace": {
+      const snapId = tc.args.snapshot_id;
+      if (!snapId) return JSON.stringify({ ok: false, error: "snapshot_id is required" });
+      try {
+        const res = rollbackSnapshot(workspaceRoot, snapId);
+        return JSON.stringify(res);
+      } catch (err) {
+        return JSON.stringify({ ok: false, error: err.message });
+      }
+    }
+
+    default:
+      return JSON.stringify({ ok: false, error: `Unknown tool: ${tc.name}` });
   }
 }
 
@@ -877,7 +1106,7 @@ async function runAgenticLoop({ sessionKey, agentId, userMessage, model, tools, 
       // Execute all tool calls and collect results
       const toolResults = await Promise.all(
         toolCalls.map(async (tc) => {
-          const result = await executeToolCall(tc, sendEvent);
+          const result = await executeToolCall(tc, sendEvent, agentId);
           return { role: "tool", tool_call_id: tc.id, content: result };
         })
       );
@@ -1172,15 +1401,70 @@ async function handleMethod(method, params, id, sendEvent) {
 
     // --- Approvals ----------------------------------------------------------
 
-    case "exec.approvals.get":
-      return resOk(id, { path: "", exists: true, hash: "hermes-approvals",
-        file: { version: 1, defaults: { security: "full", ask: "off", autoAllowSkills: true }, agents: {} } });
+    case "exec.approvals.get": {
+      const active = getPendingApprovals();
+      return resOk(id, {
+        path: "",
+        exists: true,
+        hash: "hermes-approvals",
+        approvals: active,
+        file: { version: 1, defaults: { security: "full", ask: "off", autoAllowSkills: true }, agents: {} },
+      });
+    }
 
     case "exec.approvals.set":
       return resOk(id, { hash: "hermes-approvals" });
 
-    case "exec.approval.resolve":
-      return resOk(id, { ok: true });
+    case "exec.approval.resolve": {
+      try {
+        const decision = p.decision || "allow-once";
+        const resolveRes = resolvePendingApproval(p.id, decision);
+        if (resolveRes.ok && resolveRes.approvedCommand) {
+          const execRes = await executeShellCommand(
+            p.agentId || "agent",
+            "developer",
+            resolveRes.approvedCommand,
+            resolveRes.cwd || process.cwd(),
+            { preApproved: true }
+          );
+          return resOk(id, { ok: true, decision, execution: execRes });
+        }
+        return resOk(id, { ok: resolveRes.ok, decision });
+      } catch (err) {
+        return resOk(id, { ok: false, error: err.message });
+      }
+    }
+
+    // --- Workspace Snapshots & Rollback -------------------------------------
+
+    case "workspace.snapshots.list": {
+      const list = listSnapshots(process.cwd());
+      return resOk(id, { snapshots: list });
+    }
+
+    case "workspace.rollback": {
+      const snapId = p.snapshotId;
+      if (!snapId) return resErr(id, "missing_param", "snapshotId is required");
+      try {
+        const res = rollbackSnapshot(process.cwd(), snapId);
+        return resOk(id, res);
+      } catch (err) {
+        return resErr(id, "rollback_failed", err.message);
+      }
+    }
+
+    // --- Knowledge Vault Documents ------------------------------------------
+
+    case "vault.documents.list": {
+      const docs = listVaultDocuments(process.cwd(), p.subfolder || "research");
+      return resOk(id, { documents: docs });
+    }
+
+    // --- Role Matrix & Capabilities -----------------------------------------
+
+    case "roles.matrix.get": {
+      return resOk(id, { roles: ROLE_DEFINITIONS });
+    }
 
     // --- Status & heartbeat -------------------------------------------------
 
@@ -1470,10 +1754,11 @@ function startAdapter() {
               "config.providers.list","config.providers.save","config.providers.delete","config.test","config.update",
               "agents.files.get","agents.files.set",
               "exec.approvals.get","exec.approvals.set","exec.approval.resolve",
+              "workspace.snapshots.list","workspace.rollback","vault.documents.list","roles.matrix.get",
               "wake","skills.status","models.list",
               "tasks.list",
               "cron.list","cron.add","cron.remove","cron.patch","cron.run"],
-              events: ["chat","presence","heartbeat","cron"] },
+              events: ["chat","presence","heartbeat","cron","exec.approval.requested"] },
             snapshot: { health: { agents: allAgents, defaultAgentId: AGENT_ID },
               sessionDefaults: { mainKey: MAIN_KEY } },
             auth: { role: "operator", scopes: ["operator.admin","operator.approvals"] },

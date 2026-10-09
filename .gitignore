@@ -71,8 +71,6 @@ test-results
 /.agent/*.local.md
 /.agent/future-plans
 /.hermes
-/.hermes
-/.hermes
 /agent-canvas
 /worktrees
 /.claude
