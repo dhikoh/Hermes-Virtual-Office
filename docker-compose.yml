@@ -1,0 +1,29 @@
+services:
+  hermes-virtual-office:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hermes-virtual-office:latest
+    container_name: hermes-virtual-office
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+      - PORT=3000
+      - HERMES_ADAPTER_PORT=18789
+      - STUDIO_ACCESS_TOKEN=${STUDIO_ACCESS_TOKEN:-}
+      - HERMES_MODEL=${HERMES_MODEL:-hermes}
+      - HERMES_AGENT_NAME=${HERMES_AGENT_NAME:-Hermes}
+      - HERMES_API_URL=${HERMES_API_URL:-http://localhost:8642}
+      - HERMES_API_KEY=${HERMES_API_KEY:-}
+    volumes:
+      - hermes_ai_data:/app/_AI
+      - hermes_state_data:/app/.hermes
+
+volumes:
+  hermes_ai_data:
+    name: hermes_ai_data
+  hermes_state_data:
+    name: hermes_state_data

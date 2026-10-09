@@ -1,5 +1,10 @@
 # Hermes3D Patch Notes
 
+## Patch v1.0.10 - Coolify & Production Cloud Deployment Suite
+- **Feature (Multi-Process Production Runner)**: Created `server/start-production.js` to orchestrate both the Hermes Gateway Adapter daemon (WebSocket & REST API on port 18789) and Next.js Web Server (port 3000) inside a single container with unified signal handling (`SIGTERM`/`SIGINT`).
+- **Feature (Production Dockerfile Hardening)**: Updated `Dockerfile` runner stage to bundle `api_providers.json`, create persistent directory paths (`/app/_AI`, `/app/.hermes`), and execute `server/start-production.js` by default.
+- **Feature (Coolify Docker Compose Preset)**: Added `docker-compose.yml` pre-configured for Coolify and Docker environments with named persistent volumes (`hermes_ai_data` and `hermes_state_data`), ensuring agent memories, notes, and task history are never lost across redeployments.
+
 ## Patch v1.0.9 - Full Interactive Board Activation (Whiteboard & Kanban Board)
 - **Fix (Auto-Open Kanban Sidebar on Board Click)**: Resolved issue where clicking Kanban boards in CX Team and Product Team felt unresponsive because the sidebar remained collapsed. `OfficeScreen.tsx` now calls `setSidebarOpen(true)` whenever `onKanbanInteract` is triggered, automatically sliding in the Headquarters sidebar with the Kanban board panel active.
 - **Feature (Interactive Whiteboard in Meeting Room & Ops Corner)**: Registered `whiteboard` objects as interactive stations in `PixelOfficeScene.ts`. Hovering over a whiteboard now displays a hand cursor and blue glow tint (`#bfe8ff`), and clicking it automatically slides open the Headquarters sidebar.

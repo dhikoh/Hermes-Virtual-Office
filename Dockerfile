@@ -62,12 +62,13 @@ COPY --from=builder /app/scripts ./scripts
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/next.config.ts ./next.config.ts
+COPY --from=builder /app/api_providers.json* ./
 
-# Ensure Firefox profile directories exist and pre-fetch Camoufox browser binary (if network reachable)
-RUN mkdir -p /root/.camoufox /root/.cache/camoufox && \
+# Ensure persistent directories exist and pre-fetch Camoufox browser binary (if network reachable)
+RUN mkdir -p /app/_AI /app/.hermes /root/.camoufox /root/.cache/camoufox && \
     (npx camoufox fetch || true)
 
 EXPOSE 3000
 
-CMD ["node", "server/index.js"]
+CMD ["node", "server/start-production.js"]
 

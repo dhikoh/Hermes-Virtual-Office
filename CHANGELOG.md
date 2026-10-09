@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.10] - 2026-10-10
+
+### Added
+- **Coolify & Production Cloud Deployment Suite**:
+  - Implemented `server/start-production.js` multi-process orchestrator running both Hermes Gateway Adapter (port 18789) and Next.js Web Server (port 3000) inside a single container with graceful signal management (`SIGTERM`/`SIGINT`).
+  - Updated `Dockerfile` runner stage to bundle `api_providers.json`, create persistent directory paths (`/app/_AI`, `/app/.hermes`), and execute `server/start-production.js`.
+  - Added production-grade `docker-compose.yml` pre-configured for Coolify with named volume persistence for agent brains, notes, and session state.
+
 ## [1.0.9] - 2026-10-10
 
 ### Fixed
