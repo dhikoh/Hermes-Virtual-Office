@@ -212,4 +212,64 @@ describe("skills install gateway", () => {
       workspace: "/home/pi/.hermes/workspace-main",
     });
   });
+
+  it("handles undefined workspaceDir by resolving from agent files without throwing TypeError", async () => {
+    const call = vi.fn(async (method: string, params?: Record<string, unknown>) => {
+      if (method === "agents.files.get") {
+        return {
+          workspace: "/home/pi/.hermes/workspace-recovered",
+          file: {
+            missing: false,
+            content: "# IDENTITY",
+            path: "/home/pi/.hermes/workspace-recovered/IDENTITY.md",
+          },
+        };
+      }
+      if (method === "agents.create") return { agentId: "installer-rec" };
+      if (method === "config.get") {
+        return {
+          exists: true,
+          hash: "hash-rec",
+          config: { agents: { list: [{ id: "installer-rec", tools: {} }] } },
+        };
+      }
+      if (method === "config.patch" || method === "config.set") return { ok: true };
+      if (method === "agents.list") return { mainKey: "main" };
+      if (method === "chat.send") return { runId: "run-rec", status: "started" };
+      if (method === "agent.wait") return { ok: true };
+      throw new Error(`Unexpected method: ${method}`);
+    });
+
+    const result = await installPackagedSkillViaGatewayAgent({
+      client: { call } as unknown as GatewayClient,
+      request: {
+        packageId: "task-manager",
+        source: "hermes-workspace",
+        workspaceDir: undefined as unknown as string,
+        managedSkillsDir: "/home/pi/.hermes/skills",
+        agentId: "main",
+      },
+    });
+
+    expect(result.installed).toBe(true);
+    expect(result.installedPath).toBe("/home/pi/.hermes/workspace-recovered/skills/task-manager");
+  });
+
+  it("throws clean Error rather than TypeError trim when workspaceDir is completely missing", async () => {
+    const call = vi.fn(async () => {
+      return { file: { missing: true } };
+    });
+
+    await expect(
+      installPackagedSkillViaGatewayAgent({
+        client: { call } as unknown as GatewayClient,
+        request: {
+          packageId: "task-manager",
+          source: "hermes-workspace",
+          workspaceDir: undefined as unknown as string,
+          managedSkillsDir: "/home/pi/.hermes/skills",
+        },
+      })
+    ).rejects.toThrow("workspaceDir is required.");
+  });
 });

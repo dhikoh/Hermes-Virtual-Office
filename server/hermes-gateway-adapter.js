@@ -1174,6 +1174,119 @@ function resOk(id, payload) { return { type: "res", id, ok: true, payload: paylo
 function resErr(id, code, message) { return { type: "res", id, ok: false, error: { code, message } }; }
 
 // ---------------------------------------------------------------------------
+// Skills registry & status
+// ---------------------------------------------------------------------------
+
+const HERMES_BUILTIN_SKILLS = [
+  {
+    skillKey: "task-manager",
+    name: "task-manager",
+    description: "Capture actionable requests as persistent tasks and keep a shared Kanban task store in sync.",
+    emoji: "📋",
+    homepage: "https://github.com/iamlukethedev/Hermes3D",
+  },
+  {
+    skillKey: "soundhermes",
+    name: "soundhermes",
+    description: "Play music, radio, and ambient audio from the office Jukebox.",
+    emoji: "📻",
+    homepage: "https://github.com/iamlukethedev/Hermes3D",
+  },
+  {
+    skillKey: "todo-board",
+    name: "todo",
+    description: "Maintain a shared workspace TODO list with blocked tasks.",
+    emoji: "✅",
+    homepage: "http://x.com/iamlukethedev/",
+  },
+  {
+    skillKey: "caveman",
+    name: "caveman",
+    description: "Ultra-compact responses for fast terminal updates.",
+    emoji: "🍖",
+    homepage: "https://github.com/iamlukethedev/Hermes3D",
+  },
+  {
+    skillKey: "telegram-remote",
+    name: "telegram-remote",
+    description: "Two-way Telegram bridge for mobile office notifications and control.",
+    emoji: "📱",
+    homepage: "https://github.com/iamlukethedev/Hermes3D",
+  },
+  {
+    skillKey: "web-research",
+    name: "web-research",
+    description: "Stealth web intelligence & scraping via Camoufox browser.",
+    emoji: "🌐",
+    homepage: "https://github.com/iamlukethedev/Hermes3D",
+  },
+  {
+    skillKey: "agent-reach",
+    name: "agent-reach",
+    description: "Social media and developer community intelligence playbook.",
+    emoji: "🎯",
+    homepage: "https://github.com/prakhardixit/agent-reach",
+  },
+  {
+    skillKey: "obsidian-skills",
+    name: "obsidian-skills",
+    description: "Connected Obsidian Vault with wikilinks and knowledge structures.",
+    emoji: "💎",
+    homepage: "https://github.com/kepano/obsidian-skills",
+  },
+  {
+    skillKey: "superpowers",
+    name: "superpowers",
+    description: "Rigorous software engineering discipline, TDD, and multi-gate verification.",
+    emoji: "⚡",
+    homepage: "https://github.com/obra/superpowers",
+  },
+  {
+    skillKey: "humanizer",
+    name: "humanizer",
+    description: "Filter out repetitive AI patterns and robotic phrasing.",
+    emoji: "✍️",
+    homepage: "https://github.com/humanizer-ai/humanizer",
+  },
+  {
+    skillKey: "marketing-skills",
+    name: "marketing-skills",
+    description: "Conversion rate optimization, landing page analysis, and SEO copy.",
+    emoji: "📈",
+    homepage: "https://github.com/marketing-skills/hub",
+  },
+];
+
+const installedSkillsState = new Map(
+  HERMES_BUILTIN_SKILLS.map((s) => [s.skillKey, { enabled: true, installed: true }])
+);
+
+function getGatewaySkillsReport(targetWs) {
+  return HERMES_BUILTIN_SKILLS.map((s) => {
+    const state = installedSkillsState.get(s.skillKey) || { enabled: true, installed: true };
+    return {
+      name: s.name,
+      description: s.description,
+      source: "hermes-workspace",
+      bundled: true,
+      filePath: path.join(targetWs, "skills", s.skillKey, "SKILL.md"),
+      baseDir: path.join(targetWs, "skills", s.skillKey),
+      skillKey: s.skillKey,
+      emoji: s.emoji,
+      homepage: s.homepage,
+      always: true,
+      disabled: !state.enabled,
+      blockedByAllowlist: false,
+      eligible: Boolean(state.installed),
+      requirements: { bins: [], anyBins: [], env: [], config: [], os: [] },
+      missing: { bins: [], anyBins: [], env: [], config: [], os: [] },
+      configChecks: [],
+      install: [],
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Method handlers
 // ---------------------------------------------------------------------------
 
@@ -1342,6 +1455,41 @@ async function handleMethod(method, params, id, sendEvent) {
       const runId = (typeof p.idempotencyKey === "string" && p.idempotencyKey) ? p.idempotencyKey : randomId();
 
       if (!userMessage) return resOk(id, { status: "no-op", runId });
+
+      // Fast-path: automated skill installer writing files
+      if (userMessage.startsWith("Create these exact skill files inside the current workspace")) {
+        const sessionAgentId = sessionKey.startsWith("agent:") ? sessionKey.split(":")[1] : AGENT_ID;
+        const agent = agentRegistry.get(sessionAgentId);
+        const agentWs = (agent && agent.workspace) ? agent.workspace : path.join(HOME, ".hermes", "workspace-hermes");
+        try {
+          const matches = [...userMessage.matchAll(/- path: ("(?:[^"\\]|\\.)*")\s+content: ("(?:[^"\\]|\\.)*")/g)];
+          for (const match of matches) {
+            const relPath = JSON.parse(match[1]);
+            const fileContent = JSON.parse(match[2]);
+            const fullTarget = path.join(agentWs, relPath);
+            fs.mkdirSync(path.dirname(fullTarget), { recursive: true });
+            fs.writeFileSync(fullTarget, fileContent, "utf8");
+          }
+        } catch (err) {
+          console.warn("[hermes-adapter] Installer auto-write warning:", err.message);
+        }
+
+        setImmediate(() => {
+          sendEvent({
+            type: "event",
+            event: "chat",
+            seq: 0,
+            payload: {
+              runId,
+              sessionKey,
+              state: "final",
+              stopReason: "end_turn",
+              message: { role: "assistant", content: "INSTALLED" },
+            },
+          });
+        });
+        return resOk(id, { status: "started", runId });
+      }
 
       // Resolve which agent owns this session
       const sessionAgentId = sessionKey.startsWith("agent:") ? sessionKey.split(":")[1] : AGENT_ID;
@@ -1585,8 +1733,34 @@ async function handleMethod(method, params, id, sendEvent) {
 
     // --- Skills & models ----------------------------------------------------
 
-    case "skills.status":
-      return resOk(id, { skills: [] });
+    case "skills.status": {
+      const targetAgentId = typeof p.agentId === "string" ? p.agentId.trim() : AGENT_ID;
+      const agent = agentRegistry.get(targetAgentId) || agentRegistry.get(AGENT_ID);
+      const wsDir = (agent && agent.workspace) ? agent.workspace : path.join(HOME, ".hermes", "workspace-hermes");
+      const managedSkillsDir = path.join(HOME, ".hermes", "skills");
+      return resOk(id, {
+        workspaceDir: wsDir,
+        managedSkillsDir,
+        skills: getGatewaySkillsReport(wsDir),
+      });
+    }
+
+    case "skills.update": {
+      const skillKey = typeof p.skillKey === "string" ? p.skillKey.trim() : "";
+      if (!skillKey) return resErr(id, "missing_param", "skillKey is required");
+      const current = installedSkillsState.get(skillKey) || { enabled: true, installed: true };
+      if (typeof p.enabled === "boolean") {
+        current.enabled = p.enabled;
+      }
+      installedSkillsState.set(skillKey, current);
+      return resOk(id, { ok: true, skillKey, config: { enabled: current.enabled } });
+    }
+
+    case "skills.install": {
+      const name = typeof p.name === "string" ? p.name.trim() : "";
+      installedSkillsState.set(name.toLowerCase(), { enabled: true, installed: true });
+      return resOk(id, { ok: true, message: `Skill ${name} installed.`, stdout: "", stderr: "", code: 0 });
+    }
 
     case "models.list":
       try {

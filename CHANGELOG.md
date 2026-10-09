@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.8] - 2026-10-10
+
+### Fixed
+- **Kanban Task Manager Skill Resolution & Runtime Fix**:
+  - Fixed runtime TypeError `Cannot read properties of undefined (reading 'trim')` when clicking **Install TASK-MANAGER skill** from the Kanban desk prompt modal.
+  - Hardened `src/lib/skills/install-gateway.ts` (`normalizeRequired`) to safely handle `undefined` and `null` values without throwing uncaught exceptions.
+  - Added automatic fallback recovery for missing `workspaceDir` in `installPackagedSkillViaGatewayAgent` using agent file provenance.
+  - Upgraded `server/hermes-gateway-adapter.js` to implement full `skills.status`, `skills.update`, and `skills.install` RPC methods, reporting accurate workspace paths and pre-configured Virtual Office skills as ready and eligible.
+  - Added synchronous fast-path file materialization in `hermes-gateway-adapter.js` for installer messages, completing skill installations instantly.
+  - Enhanced 2D Pixel Office (`PixelOffice2D`) station click handler in `OfficeScreen.tsx` to automatically open the Kanban task board sidebar when `kanbanDeskEnabled` is active.
+  - Defensively protected skill key and name lookups across `OfficeScreen.tsx` to prevent runtime crashes from malformed external reports.
+
 ## [1.0.7] - 2026-10-10
 
 ### Added

@@ -4378,8 +4378,8 @@ export function OfficeScreen({
   const githubSkill = useMemo<SkillStatusEntry | null>(
     () =>
       marketplace.skillsReport?.skills.find((skill) => {
-        const normalizedKey = skill.skillKey.trim().toLowerCase();
-        const normalizedName = skill.name.trim().toLowerCase();
+        const normalizedKey = (skill.skillKey || "").trim().toLowerCase();
+        const normalizedName = (skill.name || "").trim().toLowerCase();
         return normalizedKey === "github" || normalizedName === "github";
       }) ?? null,
     [marketplace.skillsReport],
@@ -4387,8 +4387,8 @@ export function OfficeScreen({
   const soundhermesSkill = useMemo<SkillStatusEntry | null>(
     () =>
       marketplace.skillsReport?.skills.find((skill) => {
-        const normalizedKey = skill.skillKey.trim().toLowerCase();
-        const normalizedName = skill.name.trim().toLowerCase();
+        const normalizedKey = (skill.skillKey || "").trim().toLowerCase();
+        const normalizedName = (skill.name || "").trim().toLowerCase();
         return normalizedKey === "soundhermes" || normalizedName === "soundhermes";
       }) ?? null,
     [marketplace.skillsReport],
@@ -4396,8 +4396,8 @@ export function OfficeScreen({
   const taskManagerSkill = useMemo<SkillStatusEntry | null>(
     () =>
       marketplace.skillsReport?.skills.find((skill) => {
-        const normalizedKey = skill.skillKey.trim().toLowerCase();
-        const normalizedName = skill.name.trim().toLowerCase();
+        const normalizedKey = (skill.skillKey || "").trim().toLowerCase();
+        const normalizedName = (skill.name || "").trim().toLowerCase();
         return normalizedKey === "task-manager" || normalizedName === "task-manager";
       }) ?? null,
     [marketplace.skillsReport],
@@ -4647,7 +4647,11 @@ export function OfficeScreen({
             setJukeboxOpen(true);
           }}
           onKanbanInteract={() => {
-            setKanbanInstallPromptOpen(true);
+            if (kanbanDeskEnabled) {
+              setActiveSidebarTab("kanban");
+            } else {
+              setKanbanInstallPromptOpen(true);
+            }
           }}
           officeTitle={officeTitle}
           officeTitleLoaded={officeTitleLoaded}
