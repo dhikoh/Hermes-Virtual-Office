@@ -1,20 +1,16 @@
 # Hermes3D Patch Notes
 
+## Patch v1.0.2 - Session History UI, Clipboard Images & Quality Hardening
+- **Feature (Session History UI)**: Added a full **Session History UI** (`SessionHistoryModal.tsx`) directly accessible from the Chat Panel header (`History` button) in the `/office` main screen (`OfficeScreen.tsx`). Allows reviewing past sessions, switching active session, or deleting obsolete sessions. Verified by `tests/unit/sessionHistoryModal.test.ts`.
+- **Backend Improvement (`sessions.list` & `sessions.delete`)**: Refactored `sessions.list` in `server/hermes-gateway-adapter.js` to iterate over all stored sessions across agents instead of restricting to single main session. Added dedicated `sessions.delete` command that cleanly deletes sessions from persistent storage and disk history.
+- **Feature (Clipboard Image Paste)**: Enabled Ctrl+V image pasting into the Chat Composer textarea (`AgentChatPanel.tsx`). Clipboard image files are detected, validated against the 10 MB limit, and uploaded via `/api/files/upload`. Verified by `tests/unit/agentChatPaste.test.ts`.
+- **Critical Bug Fix ("New Session")**: Fixed severe logic bug where clicking "New Session" wiped out current session messages by invoking `sessions.reset`. "New Session" now generates a unique timestamped session key (`agent:<agentId>:<timestamp>`), opening a clean workspace while preserving previous chat history in the session list. Verified by `tests/unit/agentStore.test.ts` and `tests/unit/useChatInteractionController.test.ts`.
+- **UI & Architecture Integration**: Integrated both `SessionHistoryModal` and `ApiSettingsModal` directly into the primary `/office` screen (`OfficeScreen.tsx`). Added GatewayContext provider fallback and typed `SessionListEntry` to guarantee clean TypeScript compilation (`tsc --noEmit`).
+- **Codebase & Documentation Cleanup**: Removed duplicate specification files in `docs/` (canonical files preserved in `docs/office_sys/`) and removed obsolete scratch test scripts (`test*.js`). Synchronized versions across `package.json` (1.0.2) and `CHANGELOG.md`.
+
 ## Patch v1.0.1 - API Settings UI & Dynamic Providers
-- **Feature**: Added a new **API Settings** modal accessible from the top-right plug icon (🔌).
-- **Feature**: Replaced the hardcoded `.env` usage with a dynamic UI config updater.
-- **Feature**: Implemented a **Provider Manager** allowing users to create, edit, test, and save multiple API profiles (e.g. OpenRouter, Groq, LMStudio, OpenAI).
-- **Security**: Added robust local persistence mechanism (`api_providers.json`) that bypasses browser storage, ensuring API keys are securely persisted on the local filesystem and don't get wiped upon clearing browser cache.
-- **Backend Fix**: Fixed the `HERMES_API_URL` parsing bug in `hermes-gateway-adapter.js` that caused OpenRouter models to 404 (due to double `/v1/v1/models` appendage).
-- **Improvement**: Added a real-time `config.test` endpoint to allow testing API credentials before saving them.
-
-*(More patches coming soon!)*
-
-## Patch v1.0.2 - Session History UI & Clipboard Images
-- **Feature**: Added a full **Session History UI** directly accessible from the Chat Panel's header. You can now view previous chat sessions, switch to them, or delete them to manage history.
-- **Backend Improvement**: Refactored the 'sessions.list' endpoint in 'hermes-gateway-adapter.js' to parse through 'conversationHistory' natively and return all active chat sessions across all profiles, rather than defaulting to only the single active 'main' session limit.
-- **Feature**: Enabled Image Paste support for the Composer. Screenshots (e.g. from Print Screen) or clipboard image data can now be directly pasted using Ctrl+V.
-- **Bug Fix**: Fixed a frontend rendering issue where refreshing the browser would incorrectly load a blank session due to lack of local session-list synchronization. Chat histories now properly persist and are queryable across hot-reloads.
-- **Critical Bug Fix**: Fixed a severe logic flaw where clicking "New Session" would mistakenly delete the current session's history by incorrectly calling `sessions.reset`. "New Session" now correctly generates a unique session key (e.g. `agentId:timestamp`), preserving the old session history while opening a fresh slate.
-- **UI Consistency Fix**: Ensured the 'History' button is globally accessible, specifically injecting the session modal into the main `/office` environment (`OfficeScreen.tsx`) in addition to the standalone `/agents` screen.
-
+- **Feature (API Settings Modal)**: Added **API Settings** modal (`ApiSettingsModal.tsx`) accessible directly via the top-right plug button (🔌) in `/office` (`OfficeScreen.tsx`) as well as in `HeaderBar.tsx`.
+- **Feature (Provider Manager)**: Implemented a Provider Manager allowing users to create, edit, test, activate, and delete API profiles (e.g. OpenRouter, Groq, LMStudio, Ollama, OpenAI). Supports `config.providers.list`, `config.providers.save`, `config.providers.delete`, and `config.update`. Verified by `tests/unit/apiSettingsModal.test.ts`.
+- **Persistence**: Added local filesystem persistence (`api_providers.json`) that persists configured provider presets across browser cache clears and hot-reloads, with dynamic synchronization to `.env`.
+- **Backend Fix (URL Normalization)**: Added `resolveHermesEndpoint` in `server/hermes-gateway-adapter.js` to normalize base URLs (handling `/v1`, `/api`, trailing slashes) preventing the double `/v1/v1/models` and `/v1/v1/chat/completions` 404 error across OpenRouter and OpenAI-compatible endpoints. Verified by `tests/unit/apiProviderUrl.test.ts`.
+- **Improvement (`config.test`)**: Added real-time `config.test` gateway endpoint to test connectivity and model listing before activating a provider profile. Verified by `tests/unit/apiSettingsModal.test.ts`.

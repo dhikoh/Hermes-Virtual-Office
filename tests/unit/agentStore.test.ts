@@ -115,7 +115,7 @@ describe("agent store", () => {
     const agent = state.agents.find((entry) => entry.agentId === "agent-1")!;
     const patch = buildNewSessionAgentPatch(agent);
 
-    expect(patch.sessionKey).toBe("agent:agent-1:studio:old-session");
+    expect(patch.sessionKey).toMatch(/^agent:agent-1:\d+$/);
     expect(patch.status).toBe("idle");
     expect(patch.sessionCreated).toBe(true);
     expect(patch.sessionSettingsSynced).toBe(true);

@@ -7,7 +7,7 @@ import { resolveGatewayStatusBadgeClass } from "./colorSemantics";
 type HeaderBarProps = {
   status: GatewayStatus;
   onConnectionSettings: () => void;
-  onApiSettings: () => void;
+  onApiSettings?: () => void;
   showConnectionSettings?: boolean;
 };
 
@@ -85,7 +85,7 @@ export const HeaderBar = ({
                     className="ui-btn-ghost w-full justify-start border-transparent px-3 py-2 text-left text-xs font-medium tracking-normal text-foreground"
                     type="button"
                     onClick={() => {
-                      onApiSettings();
+                      onApiSettings?.();
                       setMenuOpen(false);
                     }}
                   >

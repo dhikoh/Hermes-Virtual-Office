@@ -261,10 +261,11 @@ async function handleMethod(method, params, id, sendEvent) {
       });
     }
 
+    case "sessions.delete":
     case "sessions.reset": {
       const key = typeof p.key === "string" ? p.key : sessionKeyFor("demo-orchestrator");
       clearHistory(key);
-      return resOk(id, { ok: true });
+      return resOk(id, { ok: true, deleted: key });
     }
 
     case "chat.send": {

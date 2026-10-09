@@ -686,6 +686,10 @@ export class GatewayBrowserClient {
     }
   }
 
+  call<T = unknown>(method: string, params?: unknown): Promise<T> {
+    return this.request<T>(method, params);
+  }
+
   request<T = unknown>(method: string, params?: unknown): Promise<T> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error("gateway not connected"));

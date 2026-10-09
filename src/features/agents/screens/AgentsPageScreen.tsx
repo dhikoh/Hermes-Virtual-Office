@@ -208,6 +208,7 @@ const AgentsPageScreen = () => {
   const { state, dispatch, hydrateAgents, setError, setLoading } = useAgentStore();
   const [showConnectionPanel, setShowConnectionPanel] = useState(false);
   const [showApiSettings, setShowApiSettings] = useState(false);
+  const [sessionHistoryModalOpen, setSessionHistoryModalOpen] = useState(false);
   const [focusFilter, setFocusFilter] = useState<FocusFilter>("all");
   const [focusedPreferencesLoaded, setFocusedPreferencesLoaded] = useState(false);
   const [agentsLoadedOnce, setAgentsLoadedOnce] = useState(false);
@@ -1877,7 +1878,7 @@ const AgentsPageScreen = () => {
       ) : null}
       
       {showApiSettings ? (
-        <ApiSettingsModal onClose={() => setShowApiSettings(false)} />
+        <ApiSettingsModal onClose={() => setShowApiSettings(false)} client={client} />
       ) : null}
     </div>
   );

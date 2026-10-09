@@ -305,9 +305,18 @@ function redactSecrets(value) {
 // Hermes HTTP API helpers
 // ---------------------------------------------------------------------------
 
+function resolveHermesEndpoint(baseUrl, endpointPath) {
+  let base = (baseUrl || "").trim().replace(/\/+$/, "");
+  const endpoint = endpointPath.startsWith("/") ? endpointPath : `/${endpointPath}`;
+  if (base.endsWith("/v1") && endpoint.startsWith("/v1/")) {
+    return `${base}${endpoint.slice(3)}`;
+  }
+  return `${base}${endpoint}`;
+}
+
 function hermesPost(path, body) {
   return new Promise((resolve, reject) => {
-    const urlStr = HERMES_API_URL + path;
+    const urlStr = resolveHermesEndpoint(HERMES_API_URL, path);
     let url;
     try { url = new URL(urlStr); } catch { reject(new Error(`Invalid URL: ${urlStr}`)); return; }
     const transport = url.protocol === "https:" ? https : http;
@@ -327,7 +336,7 @@ function hermesPost(path, body) {
 
 function hermesGet(path) {
   return new Promise((resolve, reject) => {
-    const urlStr = HERMES_API_URL + path;
+    const urlStr = resolveHermesEndpoint(HERMES_API_URL, path);
     let url;
     try { url = new URL(urlStr); } catch { reject(new Error(`Invalid URL: ${urlStr}`)); return; }
     const transport = url.protocol === "https:" ? https : http;
@@ -975,10 +984,11 @@ async function handleMethod(method, params, id, sendEvent) {
         resolved: { model: resolvedModel, modelProvider: "hermes" } });
     }
 
+    case "sessions.delete":
     case "sessions.reset": {
       const key = typeof p.key === "string" ? p.key : MAIN_SESSION_KEY;
       clearHistory(key);
-      return resOk(id, { ok: true });
+      return resOk(id, { ok: true, deleted: key });
     }
 
     // --- Chat ---------------------------------------------------------------
@@ -1228,11 +1238,11 @@ async function handleMethod(method, params, id, sendEvent) {
     }
 
     case "config.test": {
-      const apiUrl = (p.apiUrl || HERMES_API_URL).replace(/\/$/, "");
+      const apiUrl = p.apiUrl || HERMES_API_URL;
       const apiKey = p.apiKey !== undefined ? p.apiKey : HERMES_API_KEY;
       
       try {
-        const urlStr = apiUrl + "/v1/models";
+        const urlStr = resolveHermesEndpoint(apiUrl, "/v1/models");
         const fetchMethod = typeof fetch !== 'undefined' ? fetch : async (url, opts) => {
           return new Promise((resolve, reject) => {
             const parsed = new URL(url);
@@ -1381,9 +1391,10 @@ function startAdapter() {
             type: "hello-ok", protocol: 3,
             adapterType: "hermes",
             features: { methods: ["agents.list","agents.create","agents.delete","agents.update",
-              "sessions.list","sessions.preview","sessions.patch","sessions.reset",
+              "sessions.list","sessions.preview","sessions.patch","sessions.reset","sessions.delete",
               "chat.send","chat.abort","chat.history","agent.wait",
               "status","config.get","config.set","config.patch",
+              "config.providers.list","config.providers.save","config.providers.delete","config.test","config.update",
               "agents.files.get","agents.files.set",
               "exec.approvals.get","exec.approvals.set","exec.approval.resolve",
               "wake","skills.status","models.list",
@@ -1436,5 +1447,12 @@ function startAdapter() {
   });
 }
 
-loadHistoryFromDisk();
-startAdapter();
+if (require.main === module) {
+  loadHistoryFromDisk();
+  startAdapter();
+}
+
+module.exports = {
+  resolveHermesEndpoint,
+  resolveHermesModel,
+};

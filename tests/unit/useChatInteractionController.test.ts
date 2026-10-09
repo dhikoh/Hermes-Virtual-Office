@@ -487,9 +487,8 @@ describe("useChatInteractionController", () => {
       await ctx.getValue().handleNewSession("agent-1");
     });
 
-    expect(call).toHaveBeenCalledWith("sessions.reset", { key: "session-42" });
+    expect(call).not.toHaveBeenCalledWith("sessions.reset", expect.anything());
     expect(order).toEqual([
-      "sessions.reset",
       "clearRunTracking",
       "clearHistoryInFlight",
       "clearSpecialUpdateMarker",

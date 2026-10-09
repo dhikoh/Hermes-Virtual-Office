@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import { MessageSquare, ChevronDown, ChevronLeft, ChevronRight, Mic } from "lucide-react";
+import { MessageSquare, ChevronDown, ChevronLeft, ChevronRight, Mic, Plug } from "lucide-react";
 import { RetroOffice3D } from "@/features/retro-office/RetroOffice3D";
 import type { OfficeAgent } from "@/features/retro-office/core/types";
 import { PixelOffice2D } from "@/features/pixel-office/PixelOffice2D";
@@ -63,7 +63,7 @@ import {
 } from "@/lib/text/message-extract";
 import { AgentAvatarCreatorModal } from "@/features/agents/components/AgentAvatarCreatorModal";
 import { SessionHistoryModal } from "@/features/agents/components/SessionHistoryModal";
-import { type BaseEventFrame } from "@/lib/gateway/types";
+import { ApiSettingsModal } from "@/features/agents/components/ApiSettingsModal";
 import { buildNewSessionAgentPatch } from "@/features/agents/state/store";
 
 import { resolveOfficeIntentSnapshot } from "@/lib/office/deskDirectives";
@@ -1027,6 +1027,7 @@ export function OfficeScreen({
     null,
   );
   const [sessionHistoryModalOpen, setSessionHistoryModalOpen] = useState(false);
+  const [apiSettingsModalOpen, setApiSettingsModalOpen] = useState(false);
   const [remoteChatByAgentId, setRemoteChatByAgentId] = useState<
     Record<string, RemoteChatSessionState>
   >({});
@@ -5473,6 +5474,25 @@ export function OfficeScreen({
             }}
           />
         ) : null}
+
+        {apiSettingsModalOpen ? (
+          <ApiSettingsModal
+            onClose={() => setApiSettingsModalOpen(false)}
+            client={client}
+          />
+        ) : null}
+
+        <button
+          type="button"
+          onClick={() => setApiSettingsModalOpen(true)}
+          title="API Settings & Providers"
+          aria-label="API Settings"
+          data-testid="office-api-settings-toggle"
+          className="flex items-center gap-1.5 rounded border border-amber-700/50 bg-[#0e0a04]/90 px-3 py-1.5 font-mono text-[11px] font-medium tracking-wider text-amber-500/80 shadow-lg backdrop-blur transition-colors hover:border-amber-600/70 hover:text-amber-400"
+        >
+          <Plug className="h-3.5 w-3.5" />
+          <span>API</span>
+        </button>
 
         <button
           type="button"

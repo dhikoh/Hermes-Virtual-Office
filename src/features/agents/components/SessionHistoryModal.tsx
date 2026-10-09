@@ -1,10 +1,24 @@
 import React, { useEffect, useState } from "react";
 import { X, Trash2, ExternalLink } from "lucide-react";
 
-interface SessionHistoryModalProps {
+export interface SessionListEntry {
+  key: string;
+  agentId?: string;
+  updatedAt?: number | null;
+  displayName?: string;
+  origin?: { label: string; provider: string };
+  model?: string;
+  modelProvider?: string;
+}
+
+export interface SessionGatewayClient {
+  call: <T = unknown>(method: string, params?: Record<string, unknown>) => Promise<T>;
+}
+
+export interface SessionHistoryModalProps {
   open: boolean;
   agentId: string;
-  client: any;
+  client?: SessionGatewayClient | null;
   onClose: () => void;
   onSelectSession: (sessionKey: string) => void;
 }
@@ -16,21 +30,25 @@ export function SessionHistoryModal({
   onClose,
   onSelectSession,
 }: SessionHistoryModalProps) {
-  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<SessionListEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!open) return;
+    if (!client) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     client
       .call<{ sessions: SessionListEntry[] }>("sessions.list", {})
-      .then((res) => {
+      .then((res: { sessions?: SessionListEntry[] }) => {
         const agentSessions = (res.sessions || [])
-          .filter((s) => s.agentId === agentId)
-          .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+          .filter((s: SessionListEntry) => s.agentId === agentId)
+          .sort((a: SessionListEntry, b: SessionListEntry) => (b.updatedAt || 0) - (a.updatedAt || 0));
         setSessions(agentSessions);
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         console.error("Failed to load sessions:", err);
       })
       .finally(() => {
@@ -41,10 +59,15 @@ export function SessionHistoryModal({
   const handleDelete = async (e: React.MouseEvent, key: string) => {
     e.stopPropagation();
     if (!confirm("Are you sure you want to delete this session?")) return;
+    if (!client) return;
     try {
-      await client.call("sessions.reset", { key });
+      try {
+        await client.call("sessions.delete", { key });
+      } catch {
+        await client.call("sessions.reset", { key });
+      }
       setSessions((current) => current.filter((s) => s.key !== key));
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Failed to delete session:", err);
       alert("Failed to delete session.");
     }

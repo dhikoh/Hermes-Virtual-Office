@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.0.2] - 2026-10-09
+
+### Added
+- Session History UI (`SessionHistoryModal`) accessible directly from the Chat Panel header, supporting session browsing, switching, and deletion.
+- Clipboard image paste (`Ctrl+V`) for chat composer with automatic image detection and `/api/files/upload` handling.
+- Comprehensive unit test coverage for URL normalization, Session History Modal, API Settings Modal, and Clipboard Image Paste.
+
+### Fixed
+- Resolved "New Session" issue where starting a new session cleared existing conversation history; now generates unique timestamped session keys (`agent:<id>:<timestamp>`).
+- Added robust URL endpoint normalization in `hermes-gateway-adapter.js` preventing duplicate `/v1/v1/models` and `/v1/v1/chat/completions` across diverse provider URL shapes.
+- Fixed TypeScript compiler errors, declared `SessionListEntry` types, and resolved missing Gateway context imports.
+- Consolidated documentation by removing duplicate spec files in `docs/` and cleaned obsolete root test scripts.
+
+## [1.0.1] - 2026-10-09
+
+### Added
+- API Settings Modal (`ApiSettingsModal`) and Provider Manager for configuring custom LLM endpoints (OpenRouter, Groq, LMStudio, Ollama, OpenAI).
+- Real-time `config.test` gateway endpoint to verify model endpoint credentials before saving.
+- Local provider configuration persistence and dynamic environment updater.
+
 ## [0.1.4] - 2026-04-23
 
 Runtime Profiles, Multi-Floor Offices, Remote Collaboration, and Diagnostics.

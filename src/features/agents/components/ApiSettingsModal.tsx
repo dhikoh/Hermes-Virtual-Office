@@ -11,10 +11,13 @@ type Provider = {
 
 type ApiSettingsModalProps = {
   onClose: () => void;
+  client?: { call: <T = any>(method: string, params?: Record<string, unknown>) => Promise<T> } | null;
+  sendCommand?: <T = any>(method: string, params?: Record<string, unknown>) => Promise<T>;
 };
 
-export const ApiSettingsModal = ({ onClose }: ApiSettingsModalProps) => {
-  const { sendCommand } = useGateway();
+export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand }: ApiSettingsModalProps) => {
+  const gateway = useGateway();
+  const sendCommand = propSendCommand || (client ? <T = any>(method: string, params: Record<string, unknown> = {}) => client.call<T>(method, params) : gateway.sendCommand);
   
   const [providers, setProviders] = useState<Provider[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
