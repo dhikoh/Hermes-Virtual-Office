@@ -26,6 +26,27 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Install runtime libraries for Firefox / Camoufox anti-detect headless & virtual browser execution
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    xvfb \
+    libgtk-3-0 \
+    libasound2 \
+    libx11-xcb1 \
+    libdbus-glib-1-2 \
+    libxtst6 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libxfixes3 \
+    libpango-1.0-0 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libgbm1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Links images to the repository on GHCR, so packages created by a push
 # automatically grant this repo's workflows access and show up on the repo page.
 LABEL org.opencontainers.image.source="https://github.com/dhikoh/Hermes-Virtual-Office"
@@ -40,6 +61,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/next.config.ts ./next.config.ts
 
+# Ensure Firefox profile directories exist and pre-fetch Camoufox browser binary (if network reachable)
+RUN mkdir -p /root/.camoufox /root/.cache/camoufox && \
+    (npx camoufox fetch || true)
+
 EXPOSE 3000
 
 CMD ["node", "server/index.js"]
+

@@ -1,6 +1,6 @@
 {
   "name": "hermes3d",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": true,
   "license": "MIT",
   "scripts": {
@@ -24,12 +24,14 @@
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
     "@react-three/postprocessing": "^3.0.5",
+    "camoufox": "^0.5.8",
     "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.563.0",
     "next": "16.1.7",
     "phaser": "^3.90.0",
+    "playwright-core": "^1.62.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",

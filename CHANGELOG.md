@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.6] - 2026-10-10
+
+### Added
+- **Camoufox Anti-Detect Browser Engine** (`server/research/browser-service.js`): Integrated `camoufox` with automated canvas/WebGL/audio fingerprinting evasion, humanized viewport handling, and headless/virtual Xvfb modes.
+- **Per-Agent Persistent Profile Isolation**: Supported persistent profile directories under `_AI/browser-profiles/<agentId>` via Playwright's `userDataDir`, enabling agents and sub-agents to persist login sessions and cookies.
+- **Graceful Fallback Mechanism**: Built-in fallback ensuring that if Camoufox binaries are not pre-downloaded, the browser research service gracefully uses safe isolated Node HTTP/HTTPS transport.
+- **Docker & Coolify Support** (`Dockerfile`): Enhanced production runner container with complete Linux shared libraries for Firefox/Camoufox (`libgtk-3-0`, `xvfb`, `libasound2`, `libx11-xcb1`, etc.) and pre-fetched browser binaries via `npx camoufox fetch`.
+- **Gateway Browser RPCs & REST Endpoints**: Implemented `browser.status`, `browser.profiles.list`, and `browser.navigate` in WebSocket RPCs and HTTP routes (`/api/browser/status`, `/api/browser/profiles`).
+- **UI Capability Indication**: Added "Camoufox Anti-Detect" badge in `AgentSettingsPanel.tsx` under Agent Capabilities.
+- **Comprehensive Unit Testing**: Added `tests/unit/camoufoxAdapter.test.ts` and enhanced `tests/unit/vaultAndBrowser.test.ts`.
+
 ## [1.0.5] - 2026-10-10
 
 ### Fixed

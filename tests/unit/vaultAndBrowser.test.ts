@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
@@ -10,11 +11,15 @@ const {
 
 const {
   fetchIsolatedPage,
+  fetchCamoufoxPage,
   saveResearchToVault,
   extractCleanText,
+  isCamoufoxAvailable,
+  getAgentProfileDir,
+  listAgentProfiles,
 } = require("../../server/research/browser-service");
 
-describe("Knowledge Vault & Browser Research Engine v2.3.1", () => {
+describe("Knowledge Vault & Camoufox Browser Research Engine v2.4.0", () => {
   const testWorkspace = path.join(process.cwd(), "tests", "fixtures", "vault-test-workspace");
 
   beforeAll(() => {
@@ -102,4 +107,49 @@ describe("Knowledge Vault & Browser Research Engine v2.3.1", () => {
     expect(blockedRes.ok).toBe(false);
     expect(blockedRes.error).toContain("allowlist");
   });
+
+  it("safely probes Camoufox engine availability", () => {
+    const available = isCamoufoxAvailable();
+    expect(typeof available).toBe("boolean");
+  });
+
+  it("creates and manages isolated persistent profiles per agent", () => {
+    const profileResearcher = getAgentProfileDir("agent_researcher_01", testWorkspace);
+    const profileSubagent = getAgentProfileDir("subagent-data-scraper", testWorkspace);
+
+    expect(fs.existsSync(profileResearcher)).toBe(true);
+    expect(fs.existsSync(profileSubagent)).toBe(true);
+    expect(profileResearcher).toContain(path.join("_AI", "browser-profiles", "agent_researcher_01"));
+    expect(profileSubagent).toContain(path.join("_AI", "browser-profiles", "subagent-data-scraper"));
+
+    const profiles = listAgentProfiles(testWorkspace);
+    expect(profiles.length).toBeGreaterThanOrEqual(2);
+    const agentIds = profiles.map((p: { agentId: string }) => p.agentId);
+    expect(agentIds).toContain("agent_researcher_01");
+    expect(agentIds).toContain("subagent-data-scraper");
+  });
+
+  it("gracefully reports unavailable Camoufox binary if not installed locally", async () => {
+    if (!isCamoufoxAvailable()) {
+      const res = await fetchCamoufoxPage("https://example.com", {
+        allowlist: ["example.com"],
+        agentId: "test-agent",
+        workspacePath: testWorkspace,
+      });
+      expect(res.ok).toBe(false);
+      expect(res.error).toContain("Camoufox browser binary is not installed");
+    }
+  });
+
+  it("falls back to isolated HTTP transport seamlessly when Camoufox binary is absent", async () => {
+    const res = await fetchIsolatedPage("https://raw.githubusercontent.com/robots.txt", {
+      allowlist: ["raw.githubusercontent.com"],
+      agentId: "fallback-agent",
+      workspacePath: testWorkspace,
+    });
+    expect(res).toBeDefined();
+    // Allowlist validated, engine executed
+    expect(res.engine).toMatch(/^(camoufox|http-fallback)$/);
+  });
 });
+

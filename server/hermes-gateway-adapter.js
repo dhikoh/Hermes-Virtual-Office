@@ -31,7 +31,13 @@ const { ROLE_DEFINITIONS, validateRoleAction } = require("./roles/role-matrix");
 const { createSnapshot, listSnapshots, rollbackSnapshot } = require("./workspace/snapshot-manager");
 const { executeShellCommand, resolvePendingApproval, getPendingApprovals } = require("./execution/shell-executor");
 const { listVaultDocuments } = require("./vault/vault-manager");
-const { fetchIsolatedPage, saveResearchToVault } = require("./research/browser-service");
+const {
+  fetchIsolatedPage,
+  saveResearchToVault,
+  isCamoufoxAvailable,
+  listAgentProfiles,
+  getAgentProfileDir,
+} = require("./research/browser-service");
 
 function loadDotenvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -1492,6 +1498,43 @@ async function handleMethod(method, params, id, sendEvent) {
       return resOk(id, { roles: ROLE_DEFINITIONS });
     }
 
+    // --- Browser & Research Service (Camoufox & Profile Isolation) ---------
+
+    case "browser.status": {
+      return resOk(id, {
+        ok: true,
+        camoufoxAvailable: isCamoufoxAvailable(),
+        engine: isCamoufoxAvailable() ? "camoufox" : "http-isolated",
+        profiles: listAgentProfiles(process.cwd()),
+        allowlist: DEFAULT_RESEARCH_ALLOWLIST,
+      });
+    }
+
+    case "browser.profiles.list": {
+      return resOk(id, {
+        ok: true,
+        profiles: listAgentProfiles(process.cwd()),
+      });
+    }
+
+    case "browser.navigate": {
+      const url = typeof p.url === "string" ? p.url : "";
+      if (!url) return resErr(id, "missing_param", "url is required");
+      try {
+        const result = await fetchIsolatedPage(url, {
+          allowlist: Array.isArray(p.allowlist) ? p.allowlist : undefined,
+          agentId: p.agentId || "researcher",
+          preferCamoufox: p.preferCamoufox !== false,
+          saveToVault: Boolean(p.saveToVault),
+          topic: p.topic,
+          workspacePath: process.cwd(),
+        });
+        return resOk(id, result);
+      } catch (err) {
+        return resErr(id, "browser_navigation_failed", err.message);
+      }
+    }
+
     // --- Status & heartbeat -------------------------------------------------
 
     case "status": {
@@ -1729,6 +1772,27 @@ async function handleMethod(method, params, id, sendEvent) {
 
 function startAdapter() {
   const httpServer = http.createServer((req, res) => {
+    const parsedUrl = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+    if (parsedUrl.pathname === "/api/browser/status") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(
+        JSON.stringify({
+          ok: true,
+          camoufoxAvailable: isCamoufoxAvailable(),
+          engine: isCamoufoxAvailable() ? "camoufox" : "http-isolated",
+          profiles: listAgentProfiles(process.cwd()),
+        })
+      );
+    }
+    if (parsedUrl.pathname === "/api/browser/profiles") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(
+        JSON.stringify({
+          ok: true,
+          profiles: listAgentProfiles(process.cwd()),
+        })
+      );
+    }
     res.writeHead(200, { "Content-Type": "text/plain" });
     res.end("Hermes Gateway Adapter – OK\n");
   });
@@ -1781,6 +1845,7 @@ function startAdapter() {
               "agents.files.get","agents.files.set",
               "exec.approvals.get","exec.approvals.set","exec.approval.resolve",
               "workspace.snapshots.list","workspace.rollback","vault.documents.list","roles.matrix.get",
+              "browser.status","browser.profiles.list","browser.navigate",
               "wake","skills.status","models.list",
               "tasks.list",
               "cron.list","cron.add","cron.remove","cron.patch","cron.run"],
