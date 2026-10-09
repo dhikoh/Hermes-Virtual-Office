@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.5] - 2026-10-10
+
+### Fixed
+- **Session History & Chat Transcript Auto-Hydration**: Fixed issue in `/office` (`OfficeScreen.tsx`) where switching sessions or refreshing the page left the chat empty. `requestAgentHistoryRefresh` now properly builds full `transcriptEntries` from `chat.history` messages using `buildTranscriptEntriesFromLines`.
+- **Immediate History Sync on Session Switch**: Updated `handleSessionSwitch` in `OfficeScreen.tsx` and `AgentsPageScreen.tsx` to automatically trigger history retrieval upon selecting a session from the Chat History modal.
+- **Auto-Hydrate on Connect/Agent Select**: Added an effect in `OfficeScreen.tsx` that automatically fetches history for the focused agent upon gateway connection or selection if its transcript has not yet been loaded.
+- **Cross-Drive History Merge & Windows Normalization**: Enhanced `server/hermes-gateway-adapter.js` to normalize the home path across Windows systems (`USERPROFILE` / `HOME` / `cwd`) and merge conversation histories from candidate locations (`D:/tmp/.hermes`, `/tmp/.hermes`, `USERPROFILE/.hermes`), preserving all past messages and syncing them to canonical storage.
+
 ## [1.0.4] - 2026-10-09
 
 ### Added

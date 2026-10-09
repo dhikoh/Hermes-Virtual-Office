@@ -116,6 +116,7 @@ import {
 import {
   TRANSCRIPT_V2_ENABLED,
   logTranscriptDebugMetric,
+  buildTranscriptEntriesFromLines,
 } from "@/features/agents/state/transcript";
 import {
   buildGatewayModelChoices,
@@ -2281,7 +2282,19 @@ export function OfficeScreen({
           }
           const targetAgentId =
             parseAgentIdFromSessionKey(requestedSessionKey) ?? params.agentId;
-          const patch: Partial<AgentState> = {};
+          const entries = buildTranscriptEntriesFromLines({
+            lines: derived.lines,
+            sessionKey: requestedSessionKey,
+            source: "history",
+            startSequence: 0,
+            confirmed: true,
+          });
+          const patch: Partial<AgentState> = {
+            transcriptEntries: entries,
+            outputLines: derived.lines,
+            historyLoadedAt: Date.now(),
+            historyFetchedCount: messages.length,
+          };
           if (lastUser) {
             patch.lastUserMessage = lastUser;
           }
@@ -2294,13 +2307,11 @@ export function OfficeScreen({
           if (typeof derived.lastUserAt === "number") {
             patch.lastActivityAt = derived.lastUserAt;
           }
-          if (Object.keys(patch).length > 0) {
-            dispatch({
-              type: "updateAgent",
-              agentId: targetAgentId,
-              patch,
-            });
-          }
+          dispatch({
+            type: "updateAgent",
+            agentId: targetAgentId,
+            patch,
+          });
           // Do not replay movement directives from history refresh.
           // History can include old transport commands; replaying them causes auto-walks on load.
           setHermesLogEntries((previous) => {
@@ -2906,7 +2917,15 @@ export function OfficeScreen({
         sessionKey,
       }
     });
-  }, [dispatch]);
+
+    void requestAgentHistoryRefresh({
+      agentId,
+      reason: "chat-final-no-trace",
+      sessionKey,
+    });
+  }, [dispatch, requestAgentHistoryRefresh]);
+
+  const lastRequestedSessionRef = useRef<string | null>(null);
 
   const focusedChatAgent = selectedChatAgentId
     ? (state.agents.find((agent) => agent.agentId === selectedChatAgentId) ??
@@ -2918,6 +2937,29 @@ export function OfficeScreen({
     : null;
   const mainAgent =
     state.agents.find((agent) => agent.agentId === MAIN_AGENT_ID) ?? null;
+
+  useEffect(() => {
+    if (status !== "connected") {
+      lastRequestedSessionRef.current = null;
+      return;
+    }
+    if (!focusedChatAgent || !focusedChatAgent.sessionKey) return;
+    const sessionKey = focusedChatAgent.sessionKey;
+    if (lastRequestedSessionRef.current === sessionKey) return;
+
+    if (!focusedChatAgent.historyLoadedAt || (focusedChatAgent.transcriptEntries?.length ?? 0) === 0) {
+      lastRequestedSessionRef.current = sessionKey;
+      void requestAgentHistoryRefresh({
+        agentId: focusedChatAgent.agentId,
+        reason: "chat-final-no-trace",
+        sessionKey,
+      });
+    }
+  }, [
+    focusedChatAgent,
+    requestAgentHistoryRefresh,
+    status,
+  ]);
 
   useEffect(() => {
     if (!selectedChatAgentId) return;

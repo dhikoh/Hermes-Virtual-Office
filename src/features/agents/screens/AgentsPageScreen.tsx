@@ -816,7 +816,9 @@ const AgentsPageScreen = () => {
         sessionKey,
       }
     });
-  }, [dispatch, clearHistoryInFlight]);
+
+    void loadAgentHistory(agentId);
+  }, [dispatch, clearHistoryInFlight, loadAgentHistory]);
 
   useFinalizedAssistantReplyListener(state.agents, ({ text }) => {
     if (!voiceRepliesLoaded || !voiceRepliesEnabled) return;

@@ -67,7 +67,7 @@ let HERMES_API_KEY = process.env.HERMES_API_KEY || "";
 const ADAPTER_PORT = parseInt(process.env.HERMES_ADAPTER_PORT || "18789", 10);
 let HERMES_MODEL = process.env.HERMES_MODEL || "hermes";
 const HERMES_AGENT_NAME = process.env.HERMES_AGENT_NAME || "Hermes";
-const HOME = process.env.HOME || "/tmp";
+const HOME = process.env.USERPROFILE || process.env.HOME || (process.platform === "win32" ? process.cwd() : "/tmp");
 
 const AGENT_ID = "hermes";
 const MAIN_KEY = "main";
@@ -355,16 +355,34 @@ const HISTORY_FILE = path.join(HOME, ".hermes", "hermes3d-history.json");
 let persistDebounceTimer = null;
 
 function loadHistoryFromDisk() {
+  const candidateFiles = [
+    HISTORY_FILE,
+    path.join("/tmp", ".hermes", "hermes3d-history.json"),
+    "D:/tmp/.hermes/hermes3d-history.json",
+    path.join(process.cwd(), ".hermes", "hermes3d-history.json"),
+  ];
+
   try {
-    if (fs.existsSync(HISTORY_FILE)) {
-      const raw = fs.readFileSync(HISTORY_FILE, "utf8");
-      const data = JSON.parse(raw);
-      if (data && typeof data === "object") {
-        for (const [key, messages] of Object.entries(data)) {
-          if (Array.isArray(messages)) conversationHistory.set(key, messages);
+    for (const candidate of candidateFiles) {
+      if (!fs.existsSync(candidate)) continue;
+      try {
+        const raw = fs.readFileSync(candidate, "utf8");
+        const data = JSON.parse(raw);
+        if (data && typeof data === "object") {
+          for (const [key, messages] of Object.entries(data)) {
+            if (Array.isArray(messages) && messages.length > 0) {
+              const existing = conversationHistory.get(key) || [];
+              if (messages.length > existing.length) {
+                conversationHistory.set(key, messages);
+              }
+            }
+          }
         }
-        console.log(`[hermes-adapter] Loaded history for ${Object.keys(data).length} session(s).`);
-      }
+      } catch {}
+    }
+    console.log(`[hermes-adapter] Loaded history for ${conversationHistory.size} session(s).`);
+    if (conversationHistory.size > 0) {
+      saveHistoryToDisk();
     }
   } catch (err) {
     console.warn("[hermes-adapter] Could not load history:", sanitizeErrorMessage(err));
@@ -381,6 +399,14 @@ function saveHistoryToDisk() {
       }
       fs.mkdirSync(path.dirname(HISTORY_FILE), { recursive: true });
       fs.writeFileSync(HISTORY_FILE, JSON.stringify(data, null, 2), "utf8");
+
+      try {
+        const altLoc = path.join("/tmp", ".hermes", "hermes3d-history.json");
+        if (altLoc !== HISTORY_FILE) {
+          fs.mkdirSync(path.dirname(altLoc), { recursive: true });
+          fs.writeFileSync(altLoc, JSON.stringify(data, null, 2), "utf8");
+        }
+      } catch {}
     } catch (err) {
       console.warn("[hermes-adapter] Could not save history:", sanitizeErrorMessage(err));
     }
