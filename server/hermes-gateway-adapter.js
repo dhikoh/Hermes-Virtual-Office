@@ -27,7 +27,8 @@ const fs = require("fs");
 const path = require("path");
 const { WebSocketServer } = require("ws");
 
-const { ROLE_DEFINITIONS, validateRoleAction } = require("./roles/role-matrix");
+const { ROLE_DEFINITIONS, validateRoleAction, resolveCapability } = require("./roles/role-matrix");
+const { ALL_TOOLS, toolsForCapability, toolNames } = require("./roles/tool-definitions");
 const { createSnapshot, listSnapshots, rollbackSnapshot } = require("./workspace/snapshot-manager");
 const { executeShellCommand, resolvePendingApproval, getPendingApprovals } = require("./execution/shell-executor");
 const { listVaultDocuments } = require("./vault/vault-manager");
@@ -571,7 +572,7 @@ function updateEnvFile(filePath, updates) {
 }
 
 function readProvidersData() {
-  const providersFile = path.join(process.cwd(), "api_providers.json");
+  const providersFile = path.join(STATE_DIR, "api_providers.json");
   let providers = [];
   let activeProviderId = null;
   try {
@@ -584,7 +585,8 @@ function readProvidersData() {
         activeProviderId = raw.activeProviderId || null;
       }
     } else {
-      providers = [{ id: "default", name: "OpenRouter", url: "https://openrouter.ai/api", key: "" }];
+      const defaultUrl = process.env.HERMES_API_URL ? process.env.HERMES_API_URL.replace(/\/$/, "") : (HERMES_API_URL || "https://openrouter.ai/api");
+      providers = [{ id: "default", name: "Default Provider", url: defaultUrl, key: process.env.HERMES_API_KEY || "" }];
       activeProviderId = "default";
       fs.writeFileSync(providersFile, JSON.stringify({ activeProviderId, providers }, null, 2));
     }
@@ -599,7 +601,7 @@ function readProvidersData() {
 }
 
 function writeProvidersData(providers, activeProviderId) {
-  const providersFile = path.join(process.cwd(), "api_providers.json");
+  const providersFile = path.join(STATE_DIR, "api_providers.json");
   try {
     fs.writeFileSync(providersFile, JSON.stringify({ activeProviderId, providers }, null, 2));
   } catch {}
@@ -883,6 +885,19 @@ function broadcastEvent(frame) {
 async function execSpawnAgent(args) {
   const name = (typeof args.name === "string" ? args.name : "Agent").trim() || "Agent";
   const role = (typeof args.role === "string" ? args.role : "").trim();
+  let requestedCap = typeof args.capability === "string" ? args.capability.toLowerCase().trim() : "";
+  if (requestedCap === "pm") {
+    return JSON.stringify({ ok: false, error: "Cannot spawn orchestrator (pm capability is reserved for main agent)." });
+  }
+  if (!["developer", "researcher", "qa", "writer"].includes(requestedCap)) {
+    const rawRole = role.toLowerCase();
+    if (["developer", "researcher", "qa", "writer"].includes(rawRole)) {
+      requestedCap = rawRole;
+    } else {
+      requestedCap = "developer";
+    }
+  }
+
   const instructions = typeof args.instructions === "string" ? args.instructions.trim() : "";
   const boundaries = typeof args.boundaries === "string" ? args.boundaries.trim() : "";
   const model = typeof args.model === "string" && args.model.trim() ? args.model.trim() : HERMES_MODEL;
@@ -891,36 +906,27 @@ async function execSpawnAgent(args) {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const newId = `${slug}-${randomId().slice(0, 6)}`;
 
-  let systemPrompt = instructions || `You are ${name}, a ${role || "specialist"} agent.`;
+  let systemPrompt = instructions || `You are ${name}, a ${role || requestedCap} agent.`;
   if (boundaries) systemPrompt += `\n\nBoundaries: ${boundaries}`;
 
+  const agentWorkspace = path.join(STATE_DIR, `workspace-${newId}`);
   agentRegistry.set(newId, {
-    id: newId, name, workspace: path.join(STATE_DIR, `workspace-${slug}`),
-    role, systemPrompt, settings: { wipe, continuity, model, boundaries },
+    id: newId,
+    name,
+    workspace: agentWorkspace,
+    role: role || requestedCap,
+    capability: requestedCap,
+    systemPrompt,
+    settings: { wipe, continuity, model, boundaries },
   });
-  fs.mkdirSync(path.join(STATE_DIR, `workspace-${slug}`), { recursive: true });
+  fs.mkdirSync(agentWorkspace, { recursive: true });
   saveAgentsToDisk();
 
-  console.log(`[hermes-adapter] Spawned agent: ${name} (${newId})`);
-
-  // Broadcast presence so the 3D office loads the new agent immediately
-  broadcastEvent({
-    type: "event", event: "presence",
-    payload: {
-      sessions: {
-        recent: [],
-        byAgent: [...agentRegistry.keys()].map((aid) => ({
-          agentId: aid,
-          recent: [],
-        })),
-      },
-    },
-  });
-
-  return JSON.stringify({ ok: true, agent_id: newId, name, role });
+  console.log(`[hermes-adapter] Spawned agent '${name}' (${newId}) with capability '${requestedCap}'`);
+  broadcastTeamChange();
+  return JSON.stringify({ ok: true, agent_id: newId, name, capability: requestedCap });
 }
-
-async function execDelegateTask(args) {
+async function execDelegateTask(args, sendEvent) {
   const targetId = typeof args.agent_id === "string" ? args.agent_id.trim() : "";
   const message = typeof args.message === "string" ? args.message.trim() : "";
   if (!targetId || !message) return JSON.stringify({ ok: false, error: "agent_id and message required" });
@@ -929,56 +935,47 @@ async function execDelegateTask(args) {
   if (!agent) return JSON.stringify({ ok: false, error: `Agent ${targetId} not found` });
 
   const sessionKey = `agent:${targetId}:${MAIN_KEY}`;
-  const history = getHistory(sessionKey);
-  const model = agent.settings.model || HERMES_MODEL;
+  const targetCap = resolveCapability(targetId, agent, AGENT_ID);
+  const targetTools = toolsForCapability(targetCap);
+  const model = agent.settings?.model || HERMES_MODEL;
 
-  // Build messages for sub-agent
-  const systemMsg = agent.systemPrompt ? [{ role: "system", content: agent.systemPrompt }] : [];
-  const contextHistory = agent.settings.wipe ? [] : [...history];
-  const messages = [...systemMsg, ...contextHistory, { role: "user", content: message }];
-
-  // Emit chat start event for this sub-agent
+  // Emit chat start event for this sub-agent so 3D office animates
   const subRunId = randomId();
   let seqCounter = 0;
   const emitSub = (state, extra) => {
-    broadcastEvent({ type: "event", event: "chat", seq: seqCounter++,
-      payload: { runId: subRunId, sessionKey, state, ...extra } });
+    broadcastEvent({
+      type: "event",
+      event: "chat",
+      seq: seqCounter++,
+      payload: { runId: subRunId, sessionKey, state, ...extra },
+    });
   };
 
   emitSub("delta", { message: { role: "assistant", content: "\u2026" } });
 
-  let responseText = "";
+  const onTextDelta = (partial) => {
+    emitSub("delta", { message: { role: "assistant", content: partial } });
+  };
+
   try {
-    const result = await streamOneTurn(messages, model, [], (partial) => {
-      responseText = partial;
-      emitSub("delta", { message: { role: "assistant", content: partial } });
-    }, null);
-    responseText = result.textContent;
-
-    // Persist to sub-agent history
-    if (agent.settings.continuity !== false) {
-      history.push({ role: "user", content: message });
-      history.push({ role: "assistant", content: responseText });
-      saveHistoryToDisk();
-    }
-
-    emitSub("final", { stopReason: "end_turn", message: { role: "assistant", content: responseText } });
-
-    // Presence update for sub-agent session
-    broadcastEvent({
-      type: "event", event: "presence",
-      payload: { sessions: { recent: [{ key: sessionKey, updatedAt: Date.now() }],
-        byAgent: [{ agentId: targetId, recent: [{ key: sessionKey, updatedAt: Date.now() }] }] } },
+    const finalText = await runAgenticLoop({
+      sessionKey,
+      agentId: targetId,
+      userMessage: message,
+      model,
+      tools: targetTools,
+      emitDelta: onTextDelta,
+      abortCheck: null,
+      sendEvent,
     });
+
+    emitSub("final", { stopReason: "stop" });
+    return JSON.stringify({ ok: true, agent_id: targetId, response: finalText });
   } catch (err) {
-    const message = sanitizeErrorMessage(err);
-    emitSub("error", { errorMessage: message });
-    return JSON.stringify({ ok: false, error: message });
+    emitSub("error", { error: err.message });
+    return JSON.stringify({ ok: false, error: err.message });
   }
-
-  return JSON.stringify({ ok: true, agent_id: targetId, response: responseText });
 }
-
 function execListTeam() {
   const members = [...agentRegistry.values()].map((a) => ({
     id: a.id, name: a.name, role: a.role || "",
@@ -1084,26 +1081,23 @@ function buildWorkspaceMap(root) {
 }
 
 async function executeToolCall(tc, sendEvent, agentId = AGENT_ID) {
-  const agent = agentRegistry.get(agentId) || { id: agentId, role: "developer", name: "Agent" };
-  const rawRole = (agent.role || "").toLowerCase();
-  // The main orchestrator's registry role is the label "Orchestrator"; its capability key is "pm".
-  const role = rawRole === "orchestrator" ? "pm" : (rawRole || (agentId === AGENT_ID ? "pm" : "developer"));
+  const agent = agentRegistry.get(agentId) || { id: agentId, role: "developer", capability: "developer", name: "Agent" };
+  const cap = resolveCapability(agentId, agent, AGENT_ID);
   const workspaceRoot = process.cwd();
 
-  console.log(`[hermes-adapter] Tool call: ${tc.name} by ${agent.name} (${role})`, JSON.stringify(tc.args).slice(0, 120));
+  console.log(`[hermes-adapter] Tool call: ${tc.name} by ${agent.name} (${cap})`, JSON.stringify(tc.args).slice(0, 120));
 
-  // Deny-wins: team-management tools only for roles whose tool list includes them.
-  // Without this, a developer agent could spawn/dismiss agents via prompt injection.
-  const ORCHESTRATION_TOOLS = ["spawn_agent", "delegate_task", "list_team", "configure_agent", "dismiss_agent"];
-  if (ORCHESTRATION_TOOLS.includes(tc.name)) {
-    const roleDef = ROLE_DEFINITIONS[role] || ROLE_DEFINITIONS.developer;
-    if (!roleDef.tools.includes(tc.name)) {
-      return JSON.stringify({ ok: false, error: `Role ${role} cannot use ${tc.name}.` });
-    }
+  // Deny-Wins: Generic role check across ALL tools (WP2 Step 4)
+  const roleDef = ROLE_DEFINITIONS[cap];
+  if (!roleDef || !roleDef.tools.includes(tc.name)) {
+    return JSON.stringify({
+      ok: false,
+      error: `Role ${cap || "unknown"} cannot use ${tc.name}. Capability '${cap || "unknown"}' is not authorized to use tool '${tc.name}' (Deny-Wins).`,
+    });
   }
 
   switch (tc.name) {
-    case "spawn_agent":          return execSpawnAgent(tc.args, sendEvent);
+    case "spawn_agent":          return execSpawnAgent(tc.args);
     case "delegate_task":        return execDelegateTask(tc.args, sendEvent);
     case "list_team":            return execListTeam();
     case "configure_agent":      return execConfigureAgent(tc.args);
@@ -1111,7 +1105,7 @@ async function executeToolCall(tc, sendEvent, agentId = AGENT_ID) {
     case "read_agent_context":   return execReadAgentContext(tc.args);
 
     case "workspace_map": {
-      const check = validateRoleAction(role, "workspace_map");
+      const check = validateRoleAction(cap, "workspace_map");
       if (!check.allowed) return JSON.stringify({ ok: false, error: check.reason });
       const map = buildWorkspaceMap(workspaceRoot);
       return JSON.stringify({ ok: true, file_count: map.length, files: map.slice(0, 100) });
@@ -1120,7 +1114,7 @@ async function executeToolCall(tc, sendEvent, agentId = AGENT_ID) {
     case "read_file": {
       const relPath = tc.args.file_path || "";
       const fullPath = path.isAbsolute(relPath) ? relPath : path.join(workspaceRoot, relPath);
-      const check = validateRoleAction(role, "read_file", { filePath: fullPath }, workspaceRoot);
+      const check = validateRoleAction(cap, "read_file", { filePath: fullPath }, workspaceRoot);
       if (!check.allowed) return JSON.stringify({ ok: false, error: check.reason });
       if (!fs.existsSync(fullPath)) return JSON.stringify({ ok: false, error: `File not found: ${relPath}` });
       try {
@@ -1134,7 +1128,7 @@ async function executeToolCall(tc, sendEvent, agentId = AGENT_ID) {
     case "write_file": {
       const relPath = tc.args.file_path || "";
       const fullPath = path.isAbsolute(relPath) ? relPath : path.join(workspaceRoot, relPath);
-      const check = validateRoleAction(role, "write_file", { filePath: fullPath }, workspaceRoot);
+      const check = validateRoleAction(cap, "write_file", { filePath: fullPath }, workspaceRoot);
       if (!check.allowed) return JSON.stringify({ ok: false, error: check.reason });
       try {
         const snapshot = createSnapshot(workspaceRoot, [fullPath], agentId, tc.args.description || `Agent ${agent.name} wrote ${relPath}`);
@@ -1149,7 +1143,7 @@ async function executeToolCall(tc, sendEvent, agentId = AGENT_ID) {
     case "execute_command": {
       const cmd = tc.args.command || "";
       const targetCwd = tc.args.cwd ? (path.isAbsolute(tc.args.cwd) ? tc.args.cwd : path.join(workspaceRoot, tc.args.cwd)) : workspaceRoot;
-      const res = await executeShellCommand(agentId, role, cmd, targetCwd);
+      const res = await executeShellCommand(agentId, cap, cmd, targetCwd);
       if (res.status === "pending_approval") {
         broadcastEvent({
           type: "event",
@@ -1169,15 +1163,15 @@ async function executeToolCall(tc, sendEvent, agentId = AGENT_ID) {
 
     case "web_search_and_read": {
       const url = tc.args.url || "";
-      const res = await fetchIsolatedPage(url);
+      const res = await fetchIsolatedPage(url, { role: cap });
       return JSON.stringify(res);
     }
 
     case "save_research_note": {
       const topic = tc.args.topic || "Research";
-      const content = tc.args.content || "";
+      const noteContent = tc.args.content || "";
       const sources = Array.isArray(tc.args.sources) ? tc.args.sources : [];
-      const res = saveResearchToVault(workspaceRoot, topic, content, sources, agent.name || agentId);
+      const res = saveResearchToVault(workspaceRoot, topic, noteContent, sources, agent.name || agentId);
       return JSON.stringify(res);
     }
 
@@ -1188,20 +1182,16 @@ async function executeToolCall(tc, sendEvent, agentId = AGENT_ID) {
 
     case "rollback_workspace": {
       const snapId = tc.args.snapshot_id;
-      if (!snapId) return JSON.stringify({ ok: false, error: "snapshot_id is required" });
-      try {
-        const res = rollbackSnapshot(workspaceRoot, snapId);
-        return JSON.stringify(res);
-      } catch (err) {
-        return JSON.stringify({ ok: false, error: err.message });
-      }
+      if (!snapId) return JSON.stringify({ ok: false, error: "snapshot_id required" });
+      console.warn(`[rollback_workspace] Destructive rollback requested by agent '${agentId}' (${cap}) to snapshot '${snapId}'`);
+      const res = rollbackSnapshot(workspaceRoot, snapId);
+      return JSON.stringify(res);
     }
 
     default:
       return JSON.stringify({ ok: false, error: `Unknown tool: ${tc.name}` });
   }
 }
-
 // ---------------------------------------------------------------------------
 // Agentic loop - handles multi-round tool-calling conversations
 // ---------------------------------------------------------------------------
@@ -1254,8 +1244,25 @@ async function runAgenticLoop({ sessionKey, agentId, userMessage, model, tools, 
     break;
   }
 
+  // If MAX_TOOL_ROUNDS exhausted without final answer (WP2 Step 7)
+  if (!finalText && round >= MAX_TOOL_ROUNDS) {
+    try {
+      const fallback = await streamOneTurn(
+        [...messages, { role: "user", content: "Please summarize the actions taken and provide your final response." }],
+        model,
+        [],
+        emitDelta,
+        abortCheck
+      );
+      finalText = fallback.textContent || "";
+    } catch {}
+    if (!finalText) {
+      finalText = "Reached the maximum number of tool rounds (8) without a final answer.";
+    }
+  }
+
   // Persist to history
-  if (agent?.settings?.continuity !== false) {
+  if (agent?.settings?.continuity !== false && finalText && finalText.trim().length > 0) {
     history.push({ role: "user", content: userMessage });
     history.push({ role: "assistant", content: finalText });
     saveHistoryToDisk();
@@ -1408,15 +1415,28 @@ async function handleMethod(method, params, id, sendEvent) {
       const slug = agentName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
       const newId = `${slug}-${randomId().slice(0, 6)}`;
       const workspace = (typeof p.workspace === "string" && p.workspace)
-        ? p.workspace : path.join(STATE_DIR, `workspace-${slug}`);
+        ? p.workspace : path.join(STATE_DIR, `workspace-${newId}`);
+      const role = typeof p.role === "string" ? p.role.trim() : "";
+      let capability = typeof p.capability === "string" ? p.capability.toLowerCase().trim() : "";
+      if (capability === "pm") capability = "";
+      if (!["developer", "researcher", "qa", "writer"].includes(capability)) {
+        const rawRole = role.toLowerCase();
+        if (["developer", "researcher", "qa", "writer"].includes(rawRole)) {
+          capability = rawRole;
+        } else {
+          capability = "developer";
+        }
+      }
       agentRegistry.set(newId, {
         id: newId, name: agentName, workspace,
-        role: "", systemPrompt: `You are ${agentName}.`,
+        role: role || capability,
+        capability,
+        systemPrompt: typeof p.systemPrompt === "string" ? p.systemPrompt : `You are ${agentName}.`,
         settings: { wipe: false, continuity: true, model: HERMES_MODEL },
       });
       fs.mkdirSync(workspace, { recursive: true });
       saveAgentsToDisk();
-      return resOk(id, { agentId: newId, name: agentName, workspace });
+      return resOk(id, { agentId: newId, name: agentName, workspace, capability });
     }
 
     case "agents.delete": {
@@ -1436,6 +1456,9 @@ async function handleMethod(method, params, id, sendEvent) {
         if (typeof p.name === "string" && p.name.trim()) existing.name = p.name.trim();
         if (typeof p.workspace === "string" && p.workspace.trim()) existing.workspace = p.workspace.trim();
         if (typeof p.role === "string") existing.role = p.role.trim();
+        if (typeof p.capability === "string" && p.capability !== "pm" && ["developer", "researcher", "qa", "writer"].includes(p.capability.toLowerCase())) {
+          existing.capability = p.capability.toLowerCase();
+        }
         saveAgentsToDisk();
       }
       return resOk(id, { ok: true, removedBindings: 0 });
@@ -1621,8 +1644,9 @@ async function handleMethod(method, params, id, sendEvent) {
         };
 
         try {
-          // Only the orchestrator gets team management tools
-          const tools = isOrchestrator ? TEAM_TOOLS : [];
+          const sessionAgent = agentRegistry.get(sessionAgentId);
+          const sessionCap = resolveCapability(sessionAgentId, sessionAgent, AGENT_ID);
+          const tools = toolsForCapability(sessionCap);
 
           const finalText = await runAgenticLoop({
             sessionKey, agentId: sessionAgentId, userMessage,

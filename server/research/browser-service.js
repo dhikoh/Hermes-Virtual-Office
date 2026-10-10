@@ -176,7 +176,8 @@ function fetchHttpIsolatedPage(url, _allowlist = DEFAULT_RESEARCH_ALLOWLIST) {
  */
 async function fetchCamoufoxPage(url, options = {}) {
   const allowlist = options.allowlist || DEFAULT_RESEARCH_ALLOWLIST;
-  const evalRes = validateRoleAction(ROLES.RESEARCHER, "browser_navigate", { url, allowlist });
+  const role = options.role || ROLES.RESEARCHER;
+  const evalRes = validateRoleAction(role, "browser_navigate", { url, allowlist });
   if (!evalRes.allowed || evalRes.requiresApproval) {
     return {
       ok: false,
@@ -287,9 +288,11 @@ async function fetchIsolatedPage(url, options = DEFAULT_RESEARCH_ALLOWLIST) {
   let saveToVault = false;
   let topic = "";
 
+  let role = ROLES.RESEARCHER;
   if (Array.isArray(options)) {
     allowlist = options;
   } else if (options && typeof options === "object") {
+    if (typeof options.role === "string" && options.role) role = options.role;
     if (Array.isArray(options.allowlist)) allowlist = options.allowlist;
     if (typeof options.preferCamoufox === "boolean") preferCamoufox = options.preferCamoufox;
     if (typeof options.agentId === "string") agentId = options.agentId;
@@ -298,7 +301,7 @@ async function fetchIsolatedPage(url, options = DEFAULT_RESEARCH_ALLOWLIST) {
     if (typeof options.topic === "string") topic = options.topic;
   }
 
-  const evalRes = validateRoleAction(ROLES.RESEARCHER, "browser_navigate", { url, allowlist });
+  const evalRes = validateRoleAction(role, "browser_navigate", { url, allowlist });
   if (!evalRes.allowed || evalRes.requiresApproval) {
     return {
       ok: false,
@@ -314,6 +317,7 @@ async function fetchIsolatedPage(url, options = DEFAULT_RESEARCH_ALLOWLIST) {
       result = await fetchCamoufoxPage(url, {
         allowlist,
         agentId,
+        role,
         workspacePath,
         persistentProfile: true,
       });

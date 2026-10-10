@@ -22,7 +22,8 @@
     "test:e2e-adapter": "node tests/e2e-adapter-persistence.mjs",
     "e2e": "playwright test",
     "brain:export": "node scripts/brain-export.mjs",
-    "brain:import": "node scripts/brain-import.mjs"
+    "brain:import": "node scripts/brain-import.mjs",
+    "test:e2e-roles": "node tests/e2e-adapter-roles.mjs"
   },
   "dependencies": {
     "@noble/ed25519": "^3.0.0",
