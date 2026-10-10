@@ -14,10 +14,11 @@ RUN npm ci --ignore-scripts --omit=dev
 FROM node:22-slim AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
-ENV NODE_ENV=development
 RUN npm ci --ignore-scripts --include=dev
 COPY . .
+ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 # Build-time gateway URL (overridden at runtime by HERMES3D_GATEWAY_URL).
 ENV NEXT_PUBLIC_GATEWAY_URL=ws://127.0.0.1:18789
 RUN npm run build
