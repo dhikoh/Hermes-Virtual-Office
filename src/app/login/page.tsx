@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { Suspense, useEffect, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Lock,
@@ -14,7 +14,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTarget = searchParams.get("redirect") || "/office";
@@ -216,7 +216,7 @@ export default function LoginPage() {
                 Sesi tersimpan aman (30 hari)
               </span>
               <span className="font-mono text-[10px] text-slate-500 uppercase">
-                v1.0.10
+                v1.0.11
               </span>
             </div>
 
@@ -249,5 +249,24 @@ export default function LoginPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen w-full items-center justify-center bg-slate-950 text-slate-100">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+            <p className="font-mono text-xs uppercase tracking-widest text-slate-400">
+              Loading Security Gate...
+            </p>
+          </div>
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

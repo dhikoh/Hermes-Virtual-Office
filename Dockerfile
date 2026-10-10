@@ -14,7 +14,8 @@ RUN npm ci --ignore-scripts --omit=dev
 FROM node:22-slim AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+ENV NODE_ENV=development
+RUN npm ci --ignore-scripts --include=dev
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 # Build-time gateway URL (overridden at runtime by HERMES3D_GATEWAY_URL).
