@@ -1,7 +1,7 @@
-﻿"use strict";
+"use strict";
 
 /**
- * Hermes Gateway Adapter â€” with multi-agent orchestration
+ * Hermes Gateway Adapter - with multi-agent orchestration
  *
  * The main Hermes agent acts as an orchestrator and can:
  *   - spawn_agent(name, role, instructions, wipe, continuity, boundaries)
@@ -101,7 +101,7 @@ You have tools to build and manage your team autonomously:
 - **list_team**: See all current team members and their IDs, names, and roles.
 - **configure_agent**: Update an agent's name, role/title, instructions, or settings.
 - **dismiss_agent**: Remove an agent from the team.
-- **read_agent_context**: Read the recent conversation history of another agent to understand what they are currently working on, what they have already done, or what their status is. Use this for coordination â€” before delegating a task, check if the agent already has relevant context.
+- **read_agent_context**: Read the recent conversation history of another agent to understand what they are currently working on, what they have already done, or what their status is. Use this for coordination - before delegating a task, check if the agent already has relevant context.
 
 When given a goal:
 1. Analyse what specialist roles are needed.
@@ -110,7 +110,7 @@ When given a goal:
 4. Use read_agent_context to check what an agent has done or is doing before re-delegating.
 5. Synthesise results into a final answer for the user.
 
-Each spawned agent will appear as an animated character in the 3D office â€” walking when active, standing when idle.
+Each spawned agent will appear as an animated character in the 3D office - walking when active, standing when idle.
 Be concise in your responses to the user; do the heavy lifting via tool calls.`;
 
 // ---------------------------------------------------------------------------
@@ -329,13 +329,13 @@ const conversationHistory = new Map();
 /** @type {Map<string, {model?: string, thinkingLevel?: string}>} */
 const sessionSettings = new Map();
 
-/** @type {Map<string, string>} agentId/filename â†’ content */
+/** @type {Map<string, string>} agentId/filename -> content */
 const agentFiles = new Map();
 
-/** @type {Map<string, {runId: string, sessionKey: string, agentId: string, abort: () => void}>} runId â†’ abort handle */
+/** @type {Map<string, {runId: string, sessionKey: string, agentId: string, abort: () => void}>} runId -> abort handle */
 const activeRuns = new Map();
 
-/** @type {Map<string, object>} jobId â†’ CronJobSummary */
+/** @type {Map<string, object>} jobId -> CronJobSummary */
 const cronJobs = new Map();
 
 /**
@@ -783,7 +783,7 @@ async function completeOneTurn(messages, model, tools) {
 }
 
 // ---------------------------------------------------------------------------
-// SSE streaming â€” handles both text deltas and tool calls
+// SSE streaming - handles both text deltas and tool calls
 // ---------------------------------------------------------------------------
 
 /**
@@ -945,7 +945,7 @@ async function execDelegateTask(args) {
       payload: { runId: subRunId, sessionKey, state, ...extra } });
   };
 
-  emitSub("delta", { message: { role: "assistant", content: "â€¦" } });
+  emitSub("delta", { message: { role: "assistant", content: "\u2026" } });
 
   let responseText = "";
   try {
@@ -1046,7 +1046,7 @@ function execReadAgentContext(args) {
   const contextLines = messages.map((m) => {
     const role = m.role === "assistant" ? agent.name : "User";
     const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
-    return `[${role}]: ${content.slice(0, 800)}${content.length > 800 ? "â€¦" : ""}`;
+    return `[${role}]: ${content.slice(0, 800)}${content.length > 800 ? "\u2026" : ""}`;
   });
   return JSON.stringify({
     ok: true,
@@ -1203,7 +1203,7 @@ async function executeToolCall(tc, sendEvent, agentId = AGENT_ID) {
 }
 
 // ---------------------------------------------------------------------------
-// Agentic loop â€” handles multi-round tool-calling conversations
+// Agentic loop - handles multi-round tool-calling conversations
 // ---------------------------------------------------------------------------
 
 async function runAgenticLoop({ sessionKey, agentId, userMessage, model, tools, emitDelta, abortCheck, sendEvent }) {
@@ -1225,7 +1225,7 @@ async function runAgenticLoop({ sessionKey, agentId, userMessage, model, tools, 
     if (finishReason === "tool_calls" && toolCalls.length > 0) {
       // Inform user that tools are being executed (brief status text)
       const toolNames = toolCalls.map((t) => t.name).join(", ");
-      const statusText = textContent || `Executing: ${toolNames}â€¦`;
+      const statusText = textContent || `Executing: ${toolNames}\u2026`;
       if (statusText) emitDelta(statusText);
 
       // Add assistant message with tool_calls to messages
@@ -1249,7 +1249,7 @@ async function runAgenticLoop({ sessionKey, agentId, userMessage, model, tools, 
       continue;
     }
 
-    // finish_reason = "stop" (or length/unknown) â€” we're done
+    // finish_reason = "stop" (or length/unknown) - we're done
     finalText = textContent;
     break;
   }
@@ -1280,77 +1280,77 @@ const HERMES_BUILTIN_SKILLS = [
     skillKey: "task-manager",
     name: "task-manager",
     description: "Capture actionable requests as persistent tasks and keep a shared Kanban task store in sync.",
-    emoji: "ðŸ“‹",
+    emoji: "\u{1F4CB}",
     homepage: "https://github.com/iamlukethedev/Hermes3D",
   },
   {
     skillKey: "soundhermes",
     name: "soundhermes",
     description: "Play music, radio, and ambient audio from the office Jukebox.",
-    emoji: "ðŸ“»",
+    emoji: "\u{1F4FB}",
     homepage: "https://github.com/iamlukethedev/Hermes3D",
   },
   {
     skillKey: "todo-board",
     name: "todo",
     description: "Maintain a shared workspace TODO list with blocked tasks.",
-    emoji: "âœ…",
+    emoji: "\u2705",
     homepage: "http://x.com/iamlukethedev/",
   },
   {
     skillKey: "caveman",
     name: "caveman",
     description: "Ultra-compact responses for fast terminal updates.",
-    emoji: "ðŸ–",
+    emoji: "\u{1F356}",
     homepage: "https://github.com/iamlukethedev/Hermes3D",
   },
   {
     skillKey: "telegram-remote",
     name: "telegram-remote",
     description: "Two-way Telegram bridge for mobile office notifications and control.",
-    emoji: "ðŸ“±",
+    emoji: "\u{1F4F1}",
     homepage: "https://github.com/iamlukethedev/Hermes3D",
   },
   {
     skillKey: "web-research",
     name: "web-research",
     description: "Stealth web intelligence & scraping via Camoufox browser.",
-    emoji: "ðŸŒ",
+    emoji: "\u{1F310}",
     homepage: "https://github.com/iamlukethedev/Hermes3D",
   },
   {
     skillKey: "agent-reach",
     name: "agent-reach",
     description: "Social media and developer community intelligence playbook.",
-    emoji: "ðŸŽ¯",
+    emoji: "\u{1F3AF}",
     homepage: "https://github.com/prakhardixit/agent-reach",
   },
   {
     skillKey: "obsidian-skills",
     name: "obsidian-skills",
     description: "Connected Obsidian Vault with wikilinks and knowledge structures.",
-    emoji: "ðŸ’Ž",
+    emoji: "\u{1F48E}",
     homepage: "https://github.com/kepano/obsidian-skills",
   },
   {
     skillKey: "superpowers",
     name: "superpowers",
     description: "Rigorous software engineering discipline, TDD, and multi-gate verification.",
-    emoji: "âš¡",
+    emoji: "\u26A1",
     homepage: "https://github.com/obra/superpowers",
   },
   {
     skillKey: "humanizer",
     name: "humanizer",
     description: "Filter out repetitive AI patterns and robotic phrasing.",
-    emoji: "âœï¸",
+    emoji: "\u270D\uFE0F",
     homepage: "https://github.com/humanizer-ai/humanizer",
   },
   {
     skillKey: "marketing-skills",
     name: "marketing-skills",
     description: "Conversion rate optimization, landing page analysis, and SEO copy.",
-    emoji: "ðŸ“ˆ",
+    emoji: "\u{1F4C8}",
     homepage: "https://github.com/marketing-skills/hub",
   },
 ];
@@ -1397,7 +1397,7 @@ async function handleMethod(method, params, id, sendEvent) {
     case "agents.list": {
       const allAgents = [...agentRegistry.values()].map((agent) => ({
         id: agent.id, name: agent.name, workspace: agent.workspace,
-        identity: { name: agent.name, emoji: "ðŸ¤–" },
+        identity: { name: agent.name, emoji: "\u{1F916}" },
         role: agent.role,
       }));
       return resOk(id, { defaultId: AGENT_ID, mainKey: MAIN_KEY, agents: allAgents });
@@ -2140,7 +2140,7 @@ function startAdapter() {
       return;
     }
     res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("Hermes Gateway Adapter â€“ OK\n");
+    res.end("Hermes Gateway Adapter - OK\n");
   });
 
   const wss = new WebSocketServer({ server: httpServer });
@@ -2226,11 +2226,11 @@ function startAdapter() {
   });
 
   httpServer.listen(ADAPTER_PORT, "127.0.0.1", () => {
-    console.log(`\n[hermes-adapter] âœ“ Listening on ws://localhost:${ADAPTER_PORT}`);
-    console.log(`[hermes-adapter] âœ“ Forwarding to Hermes API at ${HERMES_API_URL}`);
-    console.log(`[hermes-adapter] âœ“ Model: ${HERMES_MODEL}`);
-    console.log(`[hermes-adapter] âœ“ Multi-agent orchestration: ENABLED`);
-    console.log(`\nOpen Hermes3D â†’ ws://localhost:${ADAPTER_PORT}\n`);
+    console.log(`\n[hermes-adapter] \u2713 Listening on ws://localhost:${ADAPTER_PORT}`);
+    console.log(`[hermes-adapter] \u2713 Forwarding to Hermes API at ${HERMES_API_URL}`);
+    console.log(`[hermes-adapter] \u2713 Model: ${HERMES_MODEL}`);
+    console.log(`[hermes-adapter] \u2713 Multi-agent orchestration: ENABLED`);
+    console.log(`\nOpen Hermes3D -> ws://localhost:${ADAPTER_PORT}\n`);
   });
 
   httpServer.on("error", (err) => {
