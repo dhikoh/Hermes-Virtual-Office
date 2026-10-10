@@ -186,18 +186,6 @@ function validateRoleAction(roleId, actionType, params = {}, workspaceRoot = pro
       return evaluateBrowserUrl(url, allowlist);
     }
 
-    case "save_research": {
-      // Allowed for Researcher writing exclusively to _AI/research/
-      const targetPath = (params.filePath || "").replace(/\\/g, "/");
-      if (normRole !== ROLES.RESEARCHER) {
-        return { allowed: false, level: GATE_LEVEL.BLACK, reason: "Only Researcher may use save_research." };
-      }
-      if (!targetPath.includes("/_AI/research/") && !targetPath.startsWith("_AI/research/")) {
-        return { allowed: false, level: GATE_LEVEL.BLACK, reason: "save_research is restricted to the _AI/research/ directory (Deny-Wins)." };
-      }
-      return { allowed: true, level: GATE_LEVEL.GREEN, requiresApproval: false, reason: "Saved to research vault (GREEN)" };
-    }
-
     default:
       // Fail-closed (Deny-Wins) for unknown actions (WP2 Step 4)
       return {

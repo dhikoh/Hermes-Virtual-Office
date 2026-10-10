@@ -1,8 +1,7 @@
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
 
-const { resolveStateDir, resolveUserPath, resolveDefaultHomeDir, STATE_DIRNAME } = require("./lib/state-dir");
+const { resolveStateDir } = require("./lib/state-dir");
 
 const resolveStudioSettingsPath = (env = process.env) => {
   return path.join(resolveStateDir(env), "hermes3d", "settings.json");

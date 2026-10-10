@@ -28,7 +28,7 @@ const path = require("path");
 const { WebSocketServer } = require("ws");
 
 const { ROLE_DEFINITIONS, validateRoleAction, resolveCapability } = require("./roles/role-matrix");
-const { ALL_TOOLS, toolsForCapability, toolNames } = require("./roles/tool-definitions");
+const { toolsForCapability } = require("./roles/tool-definitions");
 const { createSnapshot, listSnapshots, rollbackSnapshot } = require("./workspace/snapshot-manager");
 const { executeShellCommand, resolvePendingApproval, getPendingApprovals } = require("./execution/shell-executor");
 const { listVaultDocuments } = require("./vault/vault-manager");
@@ -114,212 +114,6 @@ Each spawned agent will appear as an animated character in the 3D office - walki
 Be concise in your responses to the user; do the heavy lifting via tool calls.`;
 
 // ---------------------------------------------------------------------------
-// Team management tools definition (OpenAI tool-calling format)
-// ---------------------------------------------------------------------------
-
-const TEAM_TOOLS = [
-  {
-    type: "function",
-    function: {
-      name: "spawn_agent",
-      description: "Create a new sub-agent team member. Returns the agent's ID.",
-      parameters: {
-        type: "object",
-        required: ["name", "role"],
-        properties: {
-          name: { type: "string", description: "Display name, e.g. 'Backend Dev'" },
-          role: { type: "string", description: "Short role description, e.g. 'Python backend specialist'" },
-          instructions: { type: "string", description: "System prompt / instructions for this agent" },
-          wipe: { type: "boolean", description: "Clear history before each run (stateless). Default false." },
-          continuity: { type: "boolean", description: "Maintain full conversation history. Default true." },
-          boundaries: { type: "string", description: "Hard constraints on what this agent may do" },
-          model: { type: "string", description: "Model to use. Defaults to hermes." },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "delegate_task",
-      description: "Send a task or question to a specific team member and get their response.",
-      parameters: {
-        type: "object",
-        required: ["agent_id", "message"],
-        properties: {
-          agent_id: { type: "string", description: "ID returned by spawn_agent" },
-          message: { type: "string", description: "The task, question, or instructions to send" },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "list_team",
-      description: "List all current team members with their IDs, names, and roles.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "configure_agent",
-      description: "Update an existing agent's name, role/title, instructions, or settings.",
-      parameters: {
-        type: "object",
-        required: ["agent_id"],
-        properties: {
-          agent_id: { type: "string" },
-          name: { type: "string" },
-          role: { type: "string", description: "Short role or title shown as subtitle below the agent name in the office (e.g. 'Marketing Chef', 'Code Reviewer')." },
-          instructions: { type: "string" },
-          wipe: { type: "boolean" },
-          continuity: { type: "boolean" },
-          boundaries: { type: "string" },
-          model: { type: "string" },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "dismiss_agent",
-      description: "Remove an agent from the team.",
-      parameters: {
-        type: "object",
-        required: ["agent_id"],
-        properties: {
-          agent_id: { type: "string" },
-          reason: { type: "string" },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "read_agent_context",
-      description: "Read the recent conversation history of another agent to understand what they are working on, what they have already done, or what their current status is. Useful for coordination and avoiding duplicate work.",
-      parameters: {
-        type: "object",
-        required: ["agent_id"],
-        properties: {
-          agent_id: { type: "string", description: "ID of the agent whose context you want to read" },
-          last_n: { type: "number", description: "How many recent messages to return (default 10, max 40)" },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "workspace_map",
-      description: "Inspect the project workspace file tree (relative paths and sizes only, no file content). Allowed for PM, Developer, and QA.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "read_file",
-      description: "Read file contents from workspace. Protected by Role Matrix and Permission Gate (blocks .env/secrets).",
-      parameters: {
-        type: "object",
-        required: ["file_path"],
-        properties: {
-          file_path: { type: "string", description: "Relative path to file in workspace" },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "write_file",
-      description: "Write or update a file in the workspace. Automatically creates a pre-mutation snapshot for 1-click rollback.",
-      parameters: {
-        type: "object",
-        required: ["file_path", "content"],
-        properties: {
-          file_path: { type: "string", description: "Relative path to file in workspace" },
-          content: { type: "string", description: "New file content to write" },
-          description: { type: "string", description: "Short explanation of the change for snapshot logs" },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "execute_command",
-      description: "Run a shell command (for Developer and QA). Dangerous/write commands pause for user approval.",
-      parameters: {
-        type: "object",
-        required: ["command"],
-        properties: {
-          command: { type: "string", description: "Shell command to run (e.g. npm test, git status)" },
-          cwd: { type: "string", description: "Optional working directory" },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "web_search_and_read",
-      description: "Fetch content from allowlisted web domains for research (Researcher only, isolated without cookies).",
-      parameters: {
-        type: "object",
-        required: ["url"],
-        properties: {
-          url: { type: "string", description: "HTTP/HTTPS URL on allowlisted domain" },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "save_research_note",
-      description: "Save research report to the Obsidian Markdown vault (_AI/research/). For Researcher only.",
-      parameters: {
-        type: "object",
-        required: ["topic", "content"],
-        properties: {
-          topic: { type: "string", description: "Title or topic of the research" },
-          content: { type: "string", description: "Markdown body of findings" },
-          sources: { type: "array", items: { type: "string" }, description: "List of source URLs" },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "list_snapshots",
-      description: "List existing workspace rollback snapshots.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "rollback_workspace",
-      description: "Rollback workspace files to a specific snapshot ID in 1 click.",
-      parameters: {
-        type: "object",
-        required: ["snapshot_id"],
-        properties: {
-          snapshot_id: { type: "string", description: "ID of snapshot to restore" },
-        },
-      },
-    },
-  },
-];
-
-// ---------------------------------------------------------------------------
 // In-memory state
 // ---------------------------------------------------------------------------
 
@@ -389,13 +183,10 @@ function mergeHistory(a, b) {
 // ponytail: single source of truth is HISTORY_FILE. Old copies in /tmp, D:/tmp,
 // or cwd are no longer read. Upgrade: add a one-time migration if those files matter.
 function loadHistoryFromDisk() {
-  const candidateFiles = [HISTORY_FILE];
-
   try {
-    for (const candidate of candidateFiles) {
-      if (!fs.existsSync(candidate)) continue;
+    if (fs.existsSync(HISTORY_FILE)) {
       try {
-        const raw = fs.readFileSync(candidate, "utf8");
+        const raw = fs.readFileSync(HISTORY_FILE, "utf8");
         const data = JSON.parse(raw);
         if (data && typeof data === "object") {
           for (const [key, messages] of Object.entries(data)) {
@@ -1742,7 +1533,6 @@ async function handleMethod(method, params, id, sendEvent) {
       // Resolve which agent owns this session
       const sessionAgentId = sessionKey.startsWith("agent:") ? sessionKey.split(":")[1] : AGENT_ID;
       const agent = agentRegistry.get(sessionAgentId);
-      const isOrchestrator = sessionAgentId === AGENT_ID;
 
       let aborted = false;
       activeRuns.set(runId, {
@@ -2425,7 +2215,6 @@ module.exports = {
   writeFileAtomic,
   executeToolCall,
   resolveHermesEndpoint,
-  resolveHermesBaseUrl,
   updateEnvFile,
   readProvidersData,
   writeProvidersData,

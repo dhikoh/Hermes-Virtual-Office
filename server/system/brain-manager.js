@@ -34,11 +34,6 @@ const CORE_FILES = [
   "api_providers.json",
 ];
 
-const CORE_DIRS = [
-  "_AI",
-  ".hermes",
-];
-
 function sanitizeTarPath(p) {
   return p.replace(/\\/g, "/").replace(/^\/+/, "");
 }

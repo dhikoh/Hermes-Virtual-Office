@@ -6,7 +6,7 @@
  */
 
 const { spawn } = require("node:child_process");
-const { validateRoleAction, ROLES } = require("../roles/role-matrix");
+const { validateRoleAction } = require("../roles/role-matrix");
 const { GATE_LEVEL } = require("../security/permission-gate");
 
 /** In-memory store for pending approvals */
