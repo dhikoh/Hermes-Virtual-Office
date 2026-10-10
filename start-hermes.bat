@@ -16,6 +16,6 @@ echo Tekan Ctrl+C untuk menghentikan server jika selesai.
 echo =========================================================
 echo.
 
-node server/start-local.js
+node server/start-stack.js --dev --open
 
 pause

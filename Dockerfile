@@ -74,5 +74,5 @@ RUN mkdir -p /app/_AI /app/.hermes /root/.camoufox /root/.cache/camoufox && \
 
 EXPOSE 3000
 
-CMD ["node", "server/start-production.js"]
+CMD ["node", "server/start-stack.js"]
 
