@@ -87,8 +87,20 @@ async function main() {
   });
   const handle = app.getRequestHandler();
 
+  const isMultiUser =
+    process.env.MULTI_USER === "true" ||
+    process.env.STUDIO_MULTI_USER === "true" ||
+    process.env.REQUIRE_AUTH === "true";
+
+  if (isMultiUser && !activeToken) {
+    throw new Error(
+      "Refusing to start Studio in multi-user mode without STUDIO_ADMIN_PASSWORD or STUDIO_ACCESS_TOKEN. Set STUDIO_ADMIN_PASSWORD."
+    );
+  }
+
   const accessGate = createAccessGate({
     token: activeToken,
+    required: isMultiUser,
   });
 
   const proxy = createGatewayProxy({

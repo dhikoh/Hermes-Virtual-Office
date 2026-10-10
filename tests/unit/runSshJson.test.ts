@@ -15,12 +15,47 @@ vi.mock("node:child_process", async () => {
   };
 });
 
-import { runSshJson } from "@/lib/ssh/gateway-host";
+import { escapePosixShellArg, runSshJson } from "@/lib/ssh/gateway-host";
 
 const mockedSpawnSync = vi.mocked(spawnSync);
 
+describe("escapePosixShellArg", () => {
+  it("wraps empty strings in single quotes", () => {
+    expect(escapePosixShellArg("")).toBe("''");
+  });
+
+  it("safely escapes shell metacharacters and single quotes", () => {
+    expect(escapePosixShellArg("foo; rm -rf /")).toBe("'foo; rm -rf /'");
+    expect(escapePosixShellArg("it's cool")).toBe("'it'\\''s cool'");
+    expect(escapePosixShellArg("$(whoami)")).toBe("'$(whoami)'");
+  });
+});
+
 describe("runSshJson", () => {
+  it("escapes all argv elements passed to ssh to prevent command injection", () => {
+    mockedSpawnSync.mockReturnValueOnce({
+      status: 0,
+      stdout: JSON.stringify({ ok: true }),
+      stderr: "",
+      error: undefined,
+    } as never);
+
+    runSshJson({
+      sshTarget: "user@host.test",
+      argv: ["bash", "-s", "--", "evil; rm -rf /", "$(cat /etc/passwd)"],
+      label: "escape-test",
+    });
+
+    const [, args] = mockedSpawnSync.mock.calls[0] as [string, string[]];
+    expect(args).toContain("bash");
+    expect(args).toContain("-s");
+    expect(args).toContain("--");
+    expect(args).toContain("'evil; rm -rf /'");
+    expect(args).toContain("'$(cat /etc/passwd)'");
+  });
+
   it("forwards maxBuffer to spawnSync when provided", () => {
+    mockedSpawnSync.mockClear();
     mockedSpawnSync.mockReturnValueOnce({
       status: 0,
       stdout: JSON.stringify({ ok: true }),

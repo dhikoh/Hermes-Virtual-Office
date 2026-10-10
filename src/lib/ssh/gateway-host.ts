@@ -130,6 +130,14 @@ export const parseJsonOutput = (raw: string, label: string): unknown => {
   }
 };
 
+const SAFE_SHELL_ARG_REGEX = /^[a-zA-Z0-9_./@=-]+$/;
+
+export const escapePosixShellArg = (arg: string): string => {
+  if (arg === "") return "''";
+  if (SAFE_SHELL_ARG_REGEX.test(arg)) return arg;
+  return `'${arg.replace(/'/g, `'\\''`)}'`;
+};
+
 export const runSshJson = (params: {
   sshTarget: string;
   sshPort?: number | null;
@@ -157,7 +165,7 @@ export const runSshJson = (params: {
   if (typeof params.sshPort === "number") {
     sshArgs.push("-p", String(params.sshPort));
   }
-  sshArgs.push(params.sshTarget, ...params.argv);
+  sshArgs.push(params.sshTarget, ...params.argv.map(escapePosixShellArg));
 
   const result = childProcess.spawnSync("ssh", sshArgs, { ...options });
   if (result.error) {

@@ -511,7 +511,7 @@ export const removeGatewayHeartbeatOverride = async (params: {
   return resolveHeartbeatSettings(nextConfig, params.agentId);
 };
 
-export type AgentSkillsAccessMode = "all" | "none" | "allowlist";
+export type AgentSkillsAccessMode = "all" | "none" | "allowlist" | "selected";
 
 const resolveRequiredAgentId = (agentId: string): string => {
   const trimmed = agentId.trim();
@@ -565,7 +565,9 @@ const buildAgentSkillsConfig = (params: {
     return params.baseConfig;
   }
 
-  if (params.mode === "allowlist") {
+  const isAllowlistMode = params.mode === "allowlist" || params.mode === "selected";
+
+  if (isAllowlistMode) {
     const rawSkills = params.skillNames;
     if (!rawSkills) {
       throw new Error("Skills allowlist is required when mode is allowlist.");
@@ -627,7 +629,7 @@ export const updateGatewayAgentSkillsAllowlist = async (params: {
   skillNames?: string[];
 }): Promise<void> => {
   const agentId = resolveRequiredAgentId(params.agentId);
-  if (params.mode === "allowlist" && !params.skillNames) {
+  if ((params.mode === "allowlist" || params.mode === "selected") && !params.skillNames) {
     throw new Error("Skills allowlist is required when mode is allowlist.");
   }
 

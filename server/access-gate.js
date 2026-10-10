@@ -101,12 +101,14 @@ function createAccessGate(options) {
   const token = String(options?.token ?? "").trim();
   const sessionHash = hashSessionToken(token);
   const cookieName = String(options?.cookieName ?? "studio_access").trim() || "studio_access";
+  const required = Boolean(options?.required);
 
-  const enabled = Boolean(token);
+  const enabled = Boolean(token) || required;
   const rateLimiter = createRateLimiter(10, 60_000);
 
   const getAuthState = (req) => {
     if (!enabled) return { authorized: true, limited: false };
+    if (!token && required) return { authorized: false, limited: false };
     const ip = resolveClientIp(req);
     const cookieHeader = req.headers?.cookie;
     const cookies = parseCookies(cookieHeader);
@@ -163,7 +165,30 @@ function createAccessGate(options) {
     return false;
   };
 
+  const isSameOriginOrLocal = (req) => {
+    const origin = req.headers?.origin;
+    if (!origin) return true;
+    try {
+      const originUrl = new URL(origin);
+      const hostHeader = req.headers?.host;
+      if (hostHeader && originUrl.host.toLowerCase() === hostHeader.toLowerCase()) {
+        return true;
+      }
+      if (
+        originUrl.hostname === "localhost" ||
+        originUrl.hostname === "127.0.0.1" ||
+        originUrl.hostname === "::1"
+      ) {
+        return true;
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  };
+
   const allowUpgrade = (req) => {
+    if (!isSameOriginOrLocal(req)) return false;
     if (!enabled) return true;
     return getAuthState(req).authorized;
   };

@@ -42,6 +42,19 @@ describe("skills remove local", () => {
     expect(fs.existsSync(skillDir)).toBe(false);
   });
 
+  it("rejects removal when root directory is passed as root", () => {
+    const rootPath = path.parse(process.cwd()).root;
+    expect(() =>
+      removeSkillLocally({
+        skillKey: "test",
+        source: "hermes-workspace",
+        baseDir: path.join(rootPath, "skills", "test"),
+        workspaceDir: rootPath,
+        managedSkillsDir: rootPath,
+      })
+    ).toThrow("Refusing to use system root");
+  });
+
   it("rejects removal outside the source root", () => {
     const workspaceDir = mkTmpDir();
     const managedSkillsDir = mkTmpDir();

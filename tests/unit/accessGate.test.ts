@@ -3,10 +3,16 @@
 import { describe, expect, it } from "vitest";
 
 describe("createAccessGate", () => {
-  it("allows when token is unset", async () => {
+  it("allows when token is unset and required is false", async () => {
     const { createAccessGate } = await import("../../server/access-gate");
     const gate = createAccessGate({ token: "" });
     expect(gate.allowUpgrade({ headers: {} })).toBe(true);
+  });
+
+  it("rejects when required is true and token is unset", async () => {
+    const { createAccessGate } = await import("../../server/access-gate");
+    const gate = createAccessGate({ token: "", required: true });
+    expect(gate.allowUpgrade({ headers: {} })).toBe(false);
   });
 
   it("rejects /api requests without cookie when enabled", async () => {
@@ -38,12 +44,32 @@ describe("createAccessGate", () => {
     expect(ended).toBe(true);
   });
 
-  it("allows upgrades when cookie matches", async () => {
+  it("allows upgrades when cookie matches and origin is safe", async () => {
     const { createAccessGate } = await import("../../server/access-gate");
     const gate = createAccessGate({ token: "abc" });
     expect(
-      gate.allowUpgrade({ headers: { cookie: "studio_access=abc" } })
+      gate.allowUpgrade({
+        headers: {
+          cookie: "studio_access=abc",
+          host: "studio.internal",
+          origin: "https://studio.internal",
+        },
+      })
     ).toBe(true);
+  });
+
+  it("rejects cross-origin upgrades to prevent CSWSH", async () => {
+    const { createAccessGate } = await import("../../server/access-gate");
+    const gate = createAccessGate({ token: "abc" });
+    expect(
+      gate.allowUpgrade({
+        headers: {
+          cookie: "studio_access=abc",
+          host: "studio.internal",
+          origin: "https://evil.attacker.test",
+        },
+      })
+    ).toBe(false);
   });
 
   it("returns 429 after repeated failed attempts", async () => {

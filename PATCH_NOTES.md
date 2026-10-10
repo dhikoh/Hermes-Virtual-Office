@@ -1,5 +1,22 @@
 # Hermes3D Patch Notes
 
+## Patch v1.0.12 - Security Hardening, Audit Remediation & Engine Deduplication
+- **Security Hardening (Multi-User Auth Blocker - S1)**: Upgraded `server/access-gate.js` with `required` mode support. In multi-user deployment (`MULTI_USER=true`), missing or empty tokens are strictly rejected instead of bypassing access checks. `server/index.js` now verifies credentials on startup in multi-user mode.
+- **Security Hardening (Remote SSH Command Injection - S2)**: Implemented strict POSIX shell argument escaping via `escapePosixShellArg` in `src/lib/ssh/gateway-host.ts`. Safely quotes metacharacters (`;`, `&`, `|`, `$()`, quotes, and spaces) before passing `argv` to OpenSSH, blocking command injection in remote agent operations, media reads, and skill removals.
+- **Security Hardening (Skill Path Traversal & Root Containment - S3)**: Hardened `src/lib/skills/remove-local.ts` by validating against system roots (`/`, `C:\`) and ensuring all removal targets are strictly confined direct subdirectories of the authorized skills root.
+- **Security Hardening (Cross-Site WebSocket Hijacking / CSWSH - S5)**: Implemented same-origin and loopback origin validation in `server/access-gate.js:allowUpgrade` to block unauthorized cross-site WebSocket handshakes.
+- **Security Hardening (IPv6 Bracket SSRF Prevention - S8)**: Updated `src/lib/security/urlSafety.ts` with bracket-stripping logic for WHATWG URL IPv6 representations (e.g. `[::1]`, `[fc00::1]`) and added comprehensive loopback address checks.
+- **Runtime & Architecture (Skills Access Mode Literal Alignment - D1)**: Unified `AgentSkillsAccessMode` across `src/lib/gateway/agentConfig.ts` and `src/lib/skills/presentation.ts` to seamlessly support both `"allowlist"` and `"selected"` literals, resolving synchronization discrepancies between the UI and backend configuration.
+- **Dependency & Build Integrity (D6 & D7)**:
+  - Moved `selfsigned` (`^5.5.0`) from `devDependencies` to runtime `dependencies` so HTTPS server initialization never crashes in stripped container environments (`--omit=dev`).
+  - Added `zustand` (`^5.0.11`) to runtime `dependencies` in `package.json`, eliminating phantom dependency hazards in the Spotify Jukebox feature.
+  - Removed unused dependencies `class-variance-authority` and `playwright-core` (X2).
+- **Dead Code Cleanup (X1 & X4)**: Removed 84 KB unreferenced vendor script `src/lib/avatars/vendor/multiavatar.js` (native lightweight SVG generator is active) and eliminated unused starter assets `public/next.svg` and `public/globe.svg`.
+- **Test Infrastructure & Coverage (T1, T2, T5)**:
+  - Updated `vitest.config.ts` to include both `*.test.ts` and `*.test.tsx`, activating previously skipped component tests (e.g., `agentAvatarCreatorModal.test.tsx`).
+  - Added dedicated unit tests for `urlSafety.ts` (`tests/unit/urlSafety.test.ts`) covering IPv4/IPv6 loopback detection and browser preview target validation.
+  - Updated npm `test` script to `vitest run` for automated CI/CD execution, adding `test:watch` for interactive development.
+
 ## Patch v1.0.11 - Security Access Gate & Cyber Login Interface
 - **Feature (Cyber Access Gate UI)**: Implemented dedicated `/login` page with futuristic dark aesthetics, pulsing status badge, username/password inputs, show/hide password toggle, and instant error feedback.
 - **Feature (Auth API Routes)**: Built `/api/auth/login`, `/api/auth/logout`, and `/api/auth/status` with constant-time credential comparison, SHA-256 session token hashing, and 30-day `HttpOnly` cookie persistence.

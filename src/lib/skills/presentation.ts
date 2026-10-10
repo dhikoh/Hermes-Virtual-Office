@@ -20,7 +20,7 @@ export type SkillReadinessState =
 
 export type AgentSkillDisplayState = "ready" | "setup-required" | "not-supported";
 
-export type AgentSkillsAccessMode = "all" | "none" | "selected";
+export type AgentSkillsAccessMode = "all" | "none" | "selected" | "allowlist";
 
 const GROUP_DEFINITIONS: Array<{ id: Exclude<SkillSourceGroupId, "other">; label: string }> = [
   { id: "workspace", label: "Workspace Skills" },

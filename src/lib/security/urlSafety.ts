@@ -1,6 +1,14 @@
 import { isIP } from "node:net";
 
-const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
+const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0", "::"]);
+
+const stripIpv6Brackets = (hostname: string): string => {
+  const trimmed = hostname.trim();
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+};
 
 const isPrivateIpv4 = (hostname: string): boolean => {
   const parts = hostname.split(".").map((part) => Number(part));
@@ -16,9 +24,9 @@ const isPrivateIpv4 = (hostname: string): boolean => {
 };
 
 const isPrivateIpv6 = (hostname: string): boolean => {
-  const normalized = hostname.trim().toLowerCase();
+  const normalized = stripIpv6Brackets(hostname).toLowerCase();
   if (!normalized) return false;
-  if (normalized === "::1") return true;
+  if (normalized === "::1" || normalized === "::") return true;
   if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true;
   if (normalized.startsWith("fe8") || normalized.startsWith("fe9")) return true;
   if (normalized.startsWith("fea") || normalized.startsWith("feb")) return true;
@@ -26,7 +34,7 @@ const isPrivateIpv6 = (hostname: string): boolean => {
 };
 
 export const isPrivateOrLoopbackHostname = (hostname: string): boolean => {
-  const normalized = hostname.trim().toLowerCase();
+  const normalized = stripIpv6Brackets(hostname).toLowerCase();
   if (!normalized) return true;
   if (LOOPBACK_HOSTNAMES.has(normalized)) return true;
   const ipVersion = isIP(normalized);

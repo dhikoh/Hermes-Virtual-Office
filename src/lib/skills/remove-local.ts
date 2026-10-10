@@ -57,17 +57,36 @@ export const removeSkillLocally = (params: SkillRemoveRequest): SkillRemoveResul
   const workspaceDir = normalizeRequiredPath(params.workspaceDir, "workspaceDir");
   const managedSkillsDir = normalizeRequiredPath(params.managedSkillsDir, "managedSkillsDir");
 
+  const isSystemRoot = (dirPath: string): boolean => {
+    const resolved = path.resolve(dirPath);
+    const parsed = path.parse(resolved);
+    return parsed.root === resolved;
+  };
+
+  if (isSystemRoot(workspaceDir)) {
+    throw new Error(`Refusing to use system root as workspace directory: ${workspaceDir}`);
+  }
+  if (isSystemRoot(managedSkillsDir)) {
+    throw new Error(`Refusing to use system root as managed skills directory: ${managedSkillsDir}`);
+  }
+
   const allowedRoot = resolveAllowedRoot({
     source,
     workspaceDir,
     managedSkillsDir,
   });
 
-  if (!isPathInside(allowedRoot, baseDir)) {
-    throw new Error(`Refusing to remove skill outside allowed root: ${baseDir}`);
+  if (isSystemRoot(allowedRoot)) {
+    throw new Error(`Refusing to use system root as skills root directory: ${allowedRoot}`);
   }
+
   if (resolveComparablePath(allowedRoot) === resolveComparablePath(baseDir)) {
     throw new Error(`Refusing to remove the skills root directory: ${baseDir}`);
+  }
+
+  const rel = path.relative(resolveComparablePath(allowedRoot), resolveComparablePath(baseDir));
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new Error(`Refusing to remove skill outside allowed root: ${baseDir}`);
   }
 
   const exists = fs.existsSync(baseDir);
