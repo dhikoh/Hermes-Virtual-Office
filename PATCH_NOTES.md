@@ -1,5 +1,14 @@
 # Hermes3D Patch Notes
 
+## Patch v1.0.14 — Audit Remediation
+- **Mojibake Elimination & Encoding Hygiene**: Removed all 29 mojibake instances in `server/hermes-gateway-adapter.js` using Unicode escapes, removed UTF-8 BOM, and added `.gitattributes` and `.editorconfig`. Verified by `tests/unit/sourceEncoding.test.ts`.
+- **Role, Tool, & Agentic Loop Integration**: Integrated capability enum (`pm|developer|researcher|qa|writer`) with single source of truth in `server/roles/tool-definitions.js` and `server/roles/role-matrix.js`. Connected sub-agents to multi-turn agentic loops in `execDelegateTask`. Verified by `tests/unit/roleToolIntegration.test.ts` and `tests/e2e-adapter-roles.mjs`.
+- **Persistence & Roster Schema v2**: Implemented Roster v2 schema with backward compatibility for legacy v1 arrays, deterministic workspace directory generation, and path traversal protection. Verified by `tests/unit/agentRegistryPersistence.test.ts`.
+- **Process Supervision & Windows Shutdown**: Made roster persistence synchronous and flushes persistence on chat/delegation completions. Added graceful IPC shutdown listener. Verified by `tests/unit/adapterShutdown.test.ts`.
+- **Launcher Unification**: Replaced separate launcher scripts with `server/start-stack.js` supporting `--dev`, `--open`, exponential backoff restart supervisor, and graceful process shutdown. Verified by `tests/unit/startStack.test.ts`.
+- **Canonical State Directory & Secret Hygiene**: Unified state directory resolution across `server/lib/state-dir.js` and `src/lib/hermes/paths.ts`. Supported `HERMES_STATE_DIR` in media route and brain manager, migrated `api_providers.json` to state directory, and prevented secret baking via `.dockerignore`. Verified by `tests/unit/stateDirParity.test.ts`, `tests/unit/gatewayMediaRoute.test.ts`, `tests/unit/brainMigration.test.ts`, and `tests/unit/apiProviderStateDir.test.ts`.
+- **Dependency & Version Alignment**: Restored `playwright-core` runtime dependency to satisfy `camoufox` peer dependency, declared `postcss` devDependency, and synchronized versions to `1.0.14`. Verified by `tests/unit/versionSync.test.ts`.
+
 ## Patch v1.0.13 - Agent Roster Persistence
 - **Bug Fix (Sub-agents lost on restart)**: `agentRegistry` lived only in memory. Spawned, configured, and dismissed agents were not written to disk, so after a server restart the chat history remained while the agents were gone. Roster now persists to `hermes3d-agents.json` on every spawn, configure, dismiss, `agents.create`, `agents.update`, and `agents.delete`, and is loaded at startup before history.
 - **State Directory**: Adapter files (roster, history, config, workspaces, skills) now resolve from one directory: `HERMES_STATE_DIR`, falling back to `~/.hermes`. This is the same variable `studio-settings.js` uses. `Dockerfile` and `docker-compose.yml` set `HERMES_STATE_DIR=/app/.hermes`, which is the mounted volume, so roster and history survive container restarts.

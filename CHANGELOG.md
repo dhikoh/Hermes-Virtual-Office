@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.0.14] - 2026-10-10
+
+### Fixed
+- **Audit Remediation & Encoding Hygiene**:
+  - Eliminated mojibake and non-standard UTF-8 encoding in `server/hermes-gateway-adapter.js` using Unicode escapes; enforced LF and UTF-8 via `.gitattributes` and `.editorconfig`.
+  - Integrated role matrix with tool capabilities and agentic delegation loops in `execDelegateTask`.
+  - Upgraded roster persistence to v2 schema with backward compatibility for legacy arrays.
+  - Implemented graceful IPC shutdown and synchronous roster persistence.
+  - Unified stack launcher into `server/start-stack.js` with backoff supervisor and clean IPC shutdown.
+  - Unified state directory resolution across server and client via `server/lib/state-dir.js` and `paths.ts`.
+  - Restored `playwright-core` runtime dependency and declared `postcss` devDependency.
+
+## [1.0.13] - 2026-10-10
+
+### Added
+- **Agent Roster Persistence**:
+  - Persisted spawned, configured, and dismissed sub-agents to `hermes3d-agents.json` with synchronous atomic writes.
+  - Resolved adapter state from `HERMES_STATE_DIR` falling back to `~/.hermes`.
+  - Integrated role guard for team tools and eliminated multiple history fallback copies.
+  - Replaced Tailwind CSS arbitrary variant with standard CSS class `ui-thinking-summary`.
+
+## [1.0.12] - 2026-10-10
+
+### Security
+- Hardened access gate with `required` mode in multi-user deployments.
+- Implemented strict POSIX argument escaping in OpenSSH client bridge.
+- Restricted skill removal targets strictly to authorized skills root.
+- Added same-origin and loopback origin validation for WebSocket upgrades.
+- Stripped WHATWG IPv6 bracket representations to prevent SSRF bypass.
+- Added `zustand` to runtime dependencies and moved `selfsigned` to runtime dependencies.
+
 ## [1.0.11] - 2026-10-10
 
 ### Added
