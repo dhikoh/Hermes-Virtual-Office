@@ -1,13 +1,45 @@
 # Hermes3D Patch Notes
 
 ## Patch v1.0.14 — Audit Remediation
-- **Mojibake Elimination & Encoding Hygiene**: Removed all 29 mojibake instances in `server/hermes-gateway-adapter.js` using Unicode escapes, removed UTF-8 BOM, and added `.gitattributes` and `.editorconfig`. Verified by `tests/unit/sourceEncoding.test.ts`.
-- **Role, Tool, & Agentic Loop Integration**: Integrated capability enum (`pm|developer|researcher|qa|writer`) with single source of truth in `server/roles/tool-definitions.js` and `server/roles/role-matrix.js`. Connected sub-agents to multi-turn agentic loops in `execDelegateTask`. Verified by `tests/unit/roleToolIntegration.test.ts` and `tests/e2e-adapter-roles.mjs`.
-- **Persistence & Roster Schema v2**: Implemented Roster v2 schema with backward compatibility for legacy v1 arrays, deterministic workspace directory generation, and path traversal protection. Verified by `tests/unit/agentRegistryPersistence.test.ts`.
-- **Process Supervision & Windows Shutdown**: Made roster persistence synchronous and flushes persistence on chat/delegation completions. Added graceful IPC shutdown listener. Verified by `tests/unit/adapterShutdown.test.ts`.
-- **Launcher Unification**: Replaced separate launcher scripts with `server/start-stack.js` supporting `--dev`, `--open`, exponential backoff restart supervisor, and graceful process shutdown. Verified by `tests/unit/startStack.test.ts`.
-- **Canonical State Directory & Secret Hygiene**: Unified state directory resolution across `server/lib/state-dir.js` and `src/lib/hermes/paths.ts`. Supported `HERMES_STATE_DIR` in media route and brain manager, migrated `api_providers.json` to state directory, and prevented secret baking via `.dockerignore`. Verified by `tests/unit/stateDirParity.test.ts`, `tests/unit/gatewayMediaRoute.test.ts`, `tests/unit/brainMigration.test.ts`, and `tests/unit/apiProviderStateDir.test.ts`.
-- **Dependency & Version Alignment**: Restored `playwright-core` runtime dependency to satisfy `camoufox` peer dependency, declared `postcss` devDependency, and synchronized versions to `1.0.14`. Verified by `tests/unit/versionSync.test.ts`.
+- **Mojibake Elimination & Encoding Hygiene**: Replaced 29 mojibake instances in `server/hermes-gateway-adapter.js` with Unicode escape sequences, removed UTF-8 BOM, and established `.gitattributes` and `.editorconfig`. Verified by `tests/unit/sourceEncoding.test.ts`.
+- **Role, Tool, & Agentic Loop Integration**: Integrated capability enum (`pm|developer|researcher|qa|writer`) across `server/roles/tool-definitions.js` and `server/roles/role-matrix.js`. Connected sub-agents to multi-turn agentic loops in `server/hermes-gateway-adapter.js`. Verified by `tests/unit/roleToolIntegration.test.ts` and `tests/e2e-adapter-roles.mjs`.
+- **Persistence & Roster Schema v2**: Implemented backward-compatible Roster v2 schema in `server/hermes-gateway-adapter.js` with deterministic ID-based workspace paths and path traversal protection. Verified by `tests/unit/agentRegistryPersistence.test.ts`.
+- **Process Supervision & Windows Shutdown**: Made roster persistence synchronous upon mutation and added immediate flush on completion. Added graceful IPC shutdown handling in `server/hermes-gateway-adapter.js`. Verified by `tests/unit/adapterShutdown.test.ts`.
+- **Launcher Unification**: Replaced split runners with unified orchestrator `server/start-stack.js` supporting `--dev`, `--open`, process supervision, and cross-platform process tree termination. Verified by `tests/unit/startStack.test.ts`.
+- **Canonical State Directory & Secret Hygiene**: Unified state directory resolution across `server/lib/state-dir.js` and `src/lib/hermes/paths.ts` via `resolveStateDir()`. Relocated `api_providers.json` to state directory and updated `.dockerignore` and `Dockerfile` to prevent secret baking. Verified by `tests/unit/stateDirParity.test.ts`, `tests/unit/gatewayMediaRoute.test.ts`, `tests/unit/brainMigration.test.ts`, and `tests/unit/apiProviderStateDir.test.ts`.
+- **Dependency & Version Alignment**: Restored `playwright-core` runtime dependency to satisfy `camoufox` peer requirements, declared `postcss` devDependency, and synchronized `package.json`, `package-lock.json`, and `CHANGELOG.md` to `1.0.14`. Verified by `tests/unit/versionSync.test.ts`.
+- **TypeScript Declarations & CI Workflow**: Created global and module declarations in `src/types/phaser.d.ts` eliminating 96 Phaser compilation errors, hermeticized `tests/unit/shellExecutor.test.ts`, and created automated GitHub Actions CI workflow in `.github/workflows/ci.yml`.
+- **Deduplication & Registry Parity**: Consolidated roadmap into `docs/office_sys/office-systems-roadmap.md`. Aligned 11 packaged skills in `src/lib/skills/catalog.ts` with `server/hermes-gateway-adapter.js`. Verified by `tests/unit/skillRegistryParity.test.ts`.
+- **Removed**: `docs/office-systems-roadmap.md` (duplicate file consolidated into canonical docs/office_sys/office-systems-roadmap.md).
+- **Dead Code Elimination**: Removed unused `TEAM_TOOLS` and `isOrchestrator` in `server/hermes-gateway-adapter.js`, unused `ROLES` in `server/execution/shell-executor.js`, and uncalled `save_research` action in `server/roles/role-matrix.js`.
+- **Verification Safeguards**: Created `tests/unit/patchNotesClaims.test.ts` to assert all patch notes file claims exist or are marked removed, added `docs/verification/TEMPLATE.md`, and documented verification output in `docs/verification/v1.0.14.md` and `CONTRIBUTING.md`.
+
+### Verification
+
+| Perintah | Hasil | Tanggal |
+|---|---|---|
+| `npm run lint` | EXIT 0 (0 errors, 24 warnings) | 2026-10-10 |
+| `npm run typecheck` | EXIT 0 (0 errors) | 2026-10-10 |
+| `npm test` | EXIT 0 (209 test files passed, 1351 tests passed, 164.32s) | 2026-10-10 |
+| `npm run test:e2e-adapter` | EXIT 0 (7 of 7 assertions passed) | 2026-10-10 |
+| `npm run test:e2e-roles` | EXIT 0 (6 of 6 assertions passed) | 2026-10-10 |
+| `npm run build` | EXIT 0 (36/36 static pages generated) | 2026-10-10 |
+| `docker build` | NOT RUN (Docker daemon unavailable in execution environment) | 2026-10-10 |
+
+### Corrections to earlier notes
+- **v1.0.2–v1.0.9 (TypeScript errors)**: Claim of "0 TypeScript errors" was incorrect. Phaser 3.90.0 package omitted bundled types, causing 96 TS7016 errors during `tsc --noEmit`. Resolved in v1.0.14 via `src/types/phaser.d.ts`.
+- **v1.0.5 (Multi-path history merge)**: Legacy merge reading `/tmp`, `D:/tmp`, and `USERPROFILE` was replaced in v1.0.13 by a single authoritative state location (hermes3d-history.json).
+- **v1.0.6 vs v1.0.12 (Playwright dependency)**: `playwright-core` was mistakenly removed as "unused" in v1.0.12; it is a required peer dependency for `camoufox@0.5.8`. Restored to runtime dependencies in v1.0.14.
+- **v1.0.10 (Container persistence & secrets)**: Claim that state is never lost across redeployments only held for `_AI/` and `.hermes/`. `api_providers.json` was located in `cwd` outside volume mounts and was copied during Docker builds. Relocated to `resolveStateDir()` and excluded in `.dockerignore` in v1.0.14.
+- **v1.0.12 T5 (Automated CI/CD)**: Claim of "automated CI/CD execution" was unsupported as no CI test pipeline existed. Created `.github/workflows/ci.yml` in v1.0.14 to run lint, typecheck, tests, and build on push and pull requests.
+- **v1.0.13 (Role guard security scope)**: Claim that role guards "prevent prompt injection" was overstated. Guards provide defense-in-depth access controls, and subagents now receive capability-scoped tools rather than an empty toolset.
+- **v1.0.13 (Test suite counts)**: Baseline test count corrected from earlier estimates to verified vitest baseline: 201 files, 1316 tests.
+
+### Known Limits
+- `write_docs` and `browse_localhost` are not implemented (Decision D1); Writer and QA roles omit these tools until implementation.
+- Agent workspace directories are retained upon agent dismissal to prevent accidental data loss.
+- Workspace path validation checks against path traversal (`..`) and root filesystems, but does not provide OS-level container isolation (Decision D2).
+- Docker container volume persistence verification is marked `NOT RUN` due to local Docker daemon unavailability.
 
 ## Patch v1.0.13 - Agent Roster Persistence
 - **Bug Fix (Sub-agents lost on restart)**: `agentRegistry` lived only in memory. Spawned, configured, and dismissed agents were not written to disk, so after a server restart the chat history remained while the agents were gone. Roster now persists to `hermes3d-agents.json` on every spawn, configure, dismiss, `agents.create`, `agents.update`, and `agents.delete`, and is loaded at startup before history.

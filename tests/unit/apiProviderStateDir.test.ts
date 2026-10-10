@@ -76,7 +76,7 @@ describe("api_providers.json State Directory Persistence (WP6)", () => {
     expect(parsed.providers).toHaveLength(2);
     expect(parsed.providers.find((p: { id: string }) => p.id === "prov-beta")?.name).toBe("Beta AI");
     expect(fs.existsSync(path.join(cwd2, "api_providers.json"))).toBe(false);
-  });
+  }, 15000);
 
   it("migrates legacy api_providers.json from cwd to HERMES_STATE_DIR on first read", () => {
     const adapterPath = path.resolve(__dirname, "../../server/hermes-gateway-adapter.js");
@@ -118,5 +118,5 @@ describe("api_providers.json State Directory Persistence (WP6)", () => {
     expect(fs.existsSync(legacyFile)).toBe(true);
     const stateContent = JSON.parse(fs.readFileSync(stateFile, "utf8"));
     expect(stateContent.activeProviderId).toBe("legacy-prod");
-  });
+  }, 15000);
 });

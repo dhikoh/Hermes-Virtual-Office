@@ -31,6 +31,8 @@ npm run dev
 - `npm run test`
 - `npm run e2e` (requires `npx playwright install`)
 
+Klaim angka (tes/error) di patch notes harus disalin dari output perintah.
+
 If your change touches generated UX audit artifacts, clean them before committing with `npm run cleanup:ux-artifacts`.
 
 ## Pull requests
