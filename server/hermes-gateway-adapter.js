@@ -551,13 +551,15 @@ function writeAgentsFile() {
 }
 
 function saveAgentsToDisk() {
-  if (persistAgentsTimer) clearTimeout(persistAgentsTimer);
-  persistAgentsTimer = setTimeout(() => {
+  if (persistAgentsTimer) {
+    clearTimeout(persistAgentsTimer);
     persistAgentsTimer = null;
-    try { writeAgentsFile(); } catch (err) {
-      console.warn("[hermes-adapter] Could not save agents:", sanitizeErrorMessage(err));
-    }
-  }, 500);
+  }
+  try {
+    writeAgentsFile();
+  } catch (err) {
+    console.warn("[hermes-adapter] Could not save agents:", sanitizeErrorMessage(err));
+  }
 }
 
 function loadAgentsFromDisk() {
@@ -1089,6 +1091,8 @@ async function execDelegateTask(args, sendEvent) {
   } catch (err) {
     emitSub("error", { error: err.message });
     return JSON.stringify({ ok: false, error: err.message });
+  } finally {
+    flushPersistence();
   }
 }
 function execListTeam() {
@@ -1776,6 +1780,7 @@ async function handleMethod(method, params, id, sendEvent) {
           else emitChat("aborted", {});
         } finally {
           activeRuns.delete(runId);
+          flushPersistence();
         }
       });
 
@@ -2209,8 +2214,10 @@ async function handleMethod(method, params, id, sendEvent) {
 // WebSocket server
 // ---------------------------------------------------------------------------
 
+let httpServer = null;
+
 function startAdapter() {
-  const httpServer = http.createServer((req, res) => {
+  httpServer = http.createServer((req, res) => {
     const parsedUrl = new URL(req.url, `http://${req.headers.host || "localhost"}`);
     if (parsedUrl.pathname === "/api/browser/status") {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -2368,16 +2375,30 @@ function startAdapter() {
   httpServer.on("error", (err) => {
     if (err.code === "EADDRINUSE") {
       console.error(`[hermes-adapter] Port ${ADAPTER_PORT} in use. Set HERMES_ADAPTER_PORT to change it.`);
+      process.exit(98);
     } else {
       console.error("[hermes-adapter] Server error:", sanitizeErrorMessage(err));
+      process.exit(1);
     }
-    process.exit(1);
   });
 }
 
 if (require.main === module) {
   loadAgentsFromDisk();
   loadHistoryFromDisk();
+  if (process.send) {
+    process.on("message", (m) => {
+      if (m && m.type === "shutdown") {
+        flushPersistence();
+        if (httpServer) {
+          httpServer.close(() => process.exit(0));
+          setTimeout(() => process.exit(0), 1000).unref();
+        } else {
+          process.exit(0);
+        }
+      }
+    });
+  }
   for (const sig of ["SIGINT", "SIGTERM"]) {
     process.once(sig, () => { flushPersistence(); process.exit(0); });
   }

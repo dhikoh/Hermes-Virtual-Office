@@ -7,11 +7,9 @@ echo =========================================================
 echo       MENGHENTIKAN HERMES VIRTUAL OFFICE (LOCAL)
 echo =========================================================
 echo.
-echo Mencari dan menghentikan proses di Port 3000 dan 18789...
+echo Mencari dan menghentikan proses Hermes Virtual Office...
 
-powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 3000, 18789 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
+powershell -NoProfile -Command "$n = 0; Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'hermes-gateway-adapter\.js|server[\\/]index\.js|start-stack\.js' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $n++ }; if ($n -eq 0) { Write-Host 'Tidak ada proses Hermes yang berjalan.' -ForegroundColor Yellow } else { Write-Host ('Berhasil! Dihentikan ' + $n + ' proses Hermes Virtual Office.') -ForegroundColor Green }"
 
-echo.
-echo Berhasil! Semua proses server Hermes Virtual Office telah dihentikan.
 echo.
 pause
