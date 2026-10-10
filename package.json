@@ -5,6 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "node server/index.js --dev",
+    "dev:all": "node server/start-local.js",
     "dev:https": "node server/index.js --dev --https",
     "hermes-adapter": "node server/hermes-gateway-adapter.js",
     "demo-gateway": "node server/demo-gateway-adapter.js",
