@@ -11,6 +11,7 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
+      - HERMES_STATE_DIR=/app/.hermes
       - PORT=3000
       - HERMES_ADAPTER_PORT=18789
       - STUDIO_ADMIN_USER=${STUDIO_ADMIN_USER:-admin}

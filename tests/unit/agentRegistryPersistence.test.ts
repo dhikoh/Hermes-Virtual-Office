@@ -39,6 +39,37 @@ describe("agent registry persistence", () => {
     expect(reloaded?.settings.boundaries).toBe("no writes");
   });
 
+  it("merges history by keeping both sides, deduped and time-ordered", () => {
+    const mod = require(ADAPTER);
+    const a = [{ role: "user", content: "hi", timestamp: 1 }, { role: "assistant", content: "yo", timestamp: 2 }];
+    const b = [{ role: "user", content: "hi", timestamp: 1 }, { role: "user", content: "new", timestamp: 3 }];
+    const merged = mod.mergeHistory(a, b);
+    expect(merged.map((m: { content: string }) => m.content)).toEqual(["hi", "yo", "new"]);
+    // shorter but newer list must not lose to longer older list
+    const older = [{ role: "user", content: "x", timestamp: 1 }, { role: "user", content: "y", timestamp: 2 }];
+    const newerShort = [{ role: "user", content: "z", timestamp: 9 }];
+    expect(mod.mergeHistory(older, newerShort)).toHaveLength(3);
+  });
+
+  it("writes atomically and leaves no temp file behind", () => {
+    const mod = require(ADAPTER);
+    const target = path.join(home, "out", "f.json");
+    mod.writeFileAtomic(target, '{"ok":1}');
+    expect(JSON.parse(fs.readFileSync(target, "utf8"))).toEqual({ ok: 1 });
+    expect(fs.readdirSync(path.dirname(target))).toEqual(["f.json"]);
+  });
+
+  it("blocks orchestration tools for non-PM roles, allows PM", async () => {
+    const mod = require(ADAPTER);
+    mod.agentRegistry.set("dev-1", { id: "dev-1", name: "Dev", role: "developer", settings: { wipe: false, continuity: true, model: "m" } });
+    const noop = () => {};
+    const denied = JSON.parse(await mod.executeToolCall({ name: "spawn_agent", args: { name: "X" } }, noop, "dev-1"));
+    expect(denied.ok).toBe(false);
+    expect(denied.error).toContain("cannot use spawn_agent");
+    const allowed = JSON.parse(await mod.executeToolCall({ name: "list_team", args: {} }, noop, "hermes"));
+    expect(Array.isArray(allowed.team)).toBe(true);
+  });
+
   it("skips corrupt file without throwing", () => {
     const dir = path.join(home, ".hermes");
     fs.mkdirSync(dir, { recursive: true });

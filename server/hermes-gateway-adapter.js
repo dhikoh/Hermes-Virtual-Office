@@ -1,7 +1,7 @@
-"use strict";
+﻿"use strict";
 
 /**
- * Hermes Gateway Adapter — with multi-agent orchestration
+ * Hermes Gateway Adapter â€” with multi-agent orchestration
  *
  * The main Hermes agent acts as an orchestrator and can:
  *   - spawn_agent(name, role, instructions, wipe, continuity, boundaries)
@@ -79,11 +79,13 @@ const ADAPTER_PORT = parseInt(process.env.HERMES_ADAPTER_PORT || "18789", 10);
 let HERMES_MODEL = process.env.HERMES_MODEL || "hermes";
 const HERMES_AGENT_NAME = process.env.HERMES_AGENT_NAME || "Hermes";
 const HOME = process.env.USERPROFILE || process.env.HOME || (process.platform === "win32" ? process.cwd() : "/tmp");
+// Single state dir for all adapter files. Same env var as studio-settings.js so Docker volume covers both.
+const STATE_DIR = process.env.HERMES_STATE_DIR?.trim() || path.join(HOME, ".hermes");
 
 const AGENT_ID = "hermes";
 const MAIN_KEY = "main";
 const MAIN_SESSION_KEY = `agent:${AGENT_ID}:${MAIN_KEY}`;
-const CONFIG_PATH = `${HOME}/.hermes/config.json`;
+const CONFIG_PATH = path.join(STATE_DIR, "config.json");
 const MAX_TOOL_ROUNDS = 8;
 
 // ---------------------------------------------------------------------------
@@ -99,7 +101,7 @@ You have tools to build and manage your team autonomously:
 - **list_team**: See all current team members and their IDs, names, and roles.
 - **configure_agent**: Update an agent's name, role/title, instructions, or settings.
 - **dismiss_agent**: Remove an agent from the team.
-- **read_agent_context**: Read the recent conversation history of another agent to understand what they are currently working on, what they have already done, or what their status is. Use this for coordination — before delegating a task, check if the agent already has relevant context.
+- **read_agent_context**: Read the recent conversation history of another agent to understand what they are currently working on, what they have already done, or what their status is. Use this for coordination â€” before delegating a task, check if the agent already has relevant context.
 
 When given a goal:
 1. Analyse what specialist roles are needed.
@@ -108,7 +110,7 @@ When given a goal:
 4. Use read_agent_context to check what an agent has done or is doing before re-delegating.
 5. Synthesise results into a final answer for the user.
 
-Each spawned agent will appear as an animated character in the 3D office — walking when active, standing when idle.
+Each spawned agent will appear as an animated character in the 3D office â€” walking when active, standing when idle.
 Be concise in your responses to the user; do the heavy lifting via tool calls.`;
 
 // ---------------------------------------------------------------------------
@@ -327,13 +329,13 @@ const conversationHistory = new Map();
 /** @type {Map<string, {model?: string, thinkingLevel?: string}>} */
 const sessionSettings = new Map();
 
-/** @type {Map<string, string>} agentId/filename → content */
+/** @type {Map<string, string>} agentId/filename â†’ content */
 const agentFiles = new Map();
 
-/** @type {Map<string, {runId: string, sessionKey: string, agentId: string, abort: () => void}>} runId → abort handle */
+/** @type {Map<string, {runId: string, sessionKey: string, agentId: string, abort: () => void}>} runId â†’ abort handle */
 const activeRuns = new Map();
 
-/** @type {Map<string, object>} jobId → CronJobSummary */
+/** @type {Map<string, object>} jobId â†’ CronJobSummary */
 const cronJobs = new Map();
 
 /**
@@ -347,7 +349,7 @@ const agentRegistry = new Map([
   [AGENT_ID, {
     id: AGENT_ID,
     name: HERMES_AGENT_NAME,
-    workspace: `${HOME}/.hermes/workspace-hermes`,
+    workspace: path.join(STATE_DIR, "workspace-hermes"),
     role: "Orchestrator",
     systemPrompt: ORCHESTRATOR_SYSTEM_PROMPT,
     settings: { wipe: false, continuity: true, model: HERMES_MODEL },
@@ -362,8 +364,27 @@ const activeSendEventFns = new Set();
 // Disk persistence for conversation history
 // ---------------------------------------------------------------------------
 
-const HISTORY_FILE = path.join(HOME, ".hermes", "hermes3d-history.json");
+const HISTORY_FILE = path.join(STATE_DIR, "hermes3d-history.json");
 let persistDebounceTimer = null;
+
+// Merge two message lists for one session. Keeps both sides, dedupes identical
+// messages (role + content + timestamp), and orders by timestamp when present.
+// ponytail: dedupe is by exact content, so two identical messages with no
+// timestamp collapse into one. Upgrade: store message ids.
+function mergeHistory(a, b) {
+  const seen = new Set();
+  const out = [];
+  for (const m of [...a, ...b]) {
+    if (!m || typeof m !== "object") continue;
+    const sig = `${m.role}|${typeof m.content === "string" ? m.content : JSON.stringify(m.content)}|${m.timestamp ?? m.ts ?? ""}`;
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    out.push(m);
+  }
+  const ts = (m) => Number(m.timestamp ?? m.ts ?? NaN);
+  if (out.every((m) => Number.isFinite(ts(m)))) out.sort((x, y) => ts(x) - ts(y));
+  return out;
+}
 
 // ponytail: single source of truth is HISTORY_FILE. Old copies in /tmp, D:/tmp,
 // or cwd are no longer read. Upgrade: add a one-time migration if those files matter.
@@ -379,10 +400,7 @@ function loadHistoryFromDisk() {
         if (data && typeof data === "object") {
           for (const [key, messages] of Object.entries(data)) {
             if (Array.isArray(messages) && messages.length > 0) {
-              const existing = conversationHistory.get(key) || [];
-              if (messages.length > existing.length) {
-                conversationHistory.set(key, messages);
-              }
+              conversationHistory.set(key, mergeHistory(conversationHistory.get(key) || [], messages));
             }
           }
         }
@@ -397,13 +415,21 @@ function loadHistoryFromDisk() {
   }
 }
 
+// Atomic write: write temp file, then rename over target. A crash mid-write
+// leaves the previous complete file in place instead of a truncated one.
+function writeFileAtomic(filePath, text) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tmp = `${filePath}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, text, "utf8");
+  fs.renameSync(tmp, filePath);
+}
+
 function writeHistoryFile() {
   const data = {};
   for (const [key, messages] of conversationHistory.entries()) {
     if (messages.length > 0) data[key] = messages;
   }
-  fs.mkdirSync(path.dirname(HISTORY_FILE), { recursive: true });
-  fs.writeFileSync(HISTORY_FILE, JSON.stringify(data, null, 2), "utf8");
+  writeFileAtomic(HISTORY_FILE, JSON.stringify(data, null, 2));
 }
 
 function saveHistoryToDisk() {
@@ -420,13 +446,12 @@ function saveHistoryToDisk() {
 // Disk persistence for agent roster (spawned sub-agents survive restart)
 // ---------------------------------------------------------------------------
 
-const AGENTS_FILE = path.join(HOME, ".hermes", "hermes3d-agents.json");
+const AGENTS_FILE = path.join(STATE_DIR, "hermes3d-agents.json");
 let persistAgentsTimer = null;
 
 function writeAgentsFile() {
   const data = [...agentRegistry.values()].filter((a) => a.id !== AGENT_ID);
-  fs.mkdirSync(path.dirname(AGENTS_FILE), { recursive: true });
-  fs.writeFileSync(AGENTS_FILE, JSON.stringify(data, null, 2), "utf8");
+  writeFileAtomic(AGENTS_FILE, JSON.stringify(data, null, 2));
 }
 
 function saveAgentsToDisk() {
@@ -450,7 +475,7 @@ function loadAgentsFromDisk() {
       agentRegistry.set(a.id, {
         id: a.id,
         name: a.name,
-        workspace: typeof a.workspace === "string" ? a.workspace : `${HOME}/.hermes/workspace-${a.id}`,
+        workspace: typeof a.workspace === "string" ? a.workspace : path.join(STATE_DIR, `workspace-${a.id}`),
         role: typeof a.role === "string" ? a.role : "",
         systemPrompt: typeof a.systemPrompt === "string" ? a.systemPrompt : `You are ${a.name}.`,
         settings: {
@@ -467,7 +492,7 @@ function loadAgentsFromDisk() {
   }
 }
 
-// ponytail: sync flush on shutdown, plain write (no tmp+rename). Upgrade: atomic write if corruption seen.
+// Sync flush on shutdown so the last debounced change is not lost.
 function flushPersistence() {
   if (persistDebounceTimer) {
     clearTimeout(persistDebounceTimer);
@@ -563,7 +588,7 @@ function readProvidersData() {
       activeProviderId = "default";
       fs.writeFileSync(providersFile, JSON.stringify({ activeProviderId, providers }, null, 2));
     }
-  } catch (err) {}
+  } catch {}
 
   if (!activeProviderId || !providers.some((p) => p.id === activeProviderId)) {
     const matched = providers.find((p) => resolveHermesBaseUrl(p.url) === HERMES_API_URL);
@@ -577,7 +602,7 @@ function writeProvidersData(providers, activeProviderId) {
   const providersFile = path.join(process.cwd(), "api_providers.json");
   try {
     fs.writeFileSync(providersFile, JSON.stringify({ activeProviderId, providers }, null, 2));
-  } catch (err) {}
+  } catch {}
 }
 
 function syncActiveProviderFromDisk() {
@@ -591,7 +616,7 @@ function syncActiveProviderFromDisk() {
         if (typeof activeProv.key === "string" && activeProv.key) HERMES_API_KEY = activeProv.key;
       }
     }
-  } catch (e) {}
+  } catch {}
 }
 
 syncActiveProviderFromDisk();
@@ -758,7 +783,7 @@ async function completeOneTurn(messages, model, tools) {
 }
 
 // ---------------------------------------------------------------------------
-// SSE streaming — handles both text deltas and tool calls
+// SSE streaming â€” handles both text deltas and tool calls
 // ---------------------------------------------------------------------------
 
 /**
@@ -870,10 +895,10 @@ async function execSpawnAgent(args) {
   if (boundaries) systemPrompt += `\n\nBoundaries: ${boundaries}`;
 
   agentRegistry.set(newId, {
-    id: newId, name, workspace: `${HOME}/.hermes/workspace-${slug}`,
+    id: newId, name, workspace: path.join(STATE_DIR, `workspace-${slug}`),
     role, systemPrompt, settings: { wipe, continuity, model, boundaries },
   });
-  fs.mkdirSync(`${HOME}/.hermes/workspace-${slug}`, { recursive: true });
+  fs.mkdirSync(path.join(STATE_DIR, `workspace-${slug}`), { recursive: true });
   saveAgentsToDisk();
 
   console.log(`[hermes-adapter] Spawned agent: ${name} (${newId})`);
@@ -920,7 +945,7 @@ async function execDelegateTask(args) {
       payload: { runId: subRunId, sessionKey, state, ...extra } });
   };
 
-  emitSub("delta", { message: { role: "assistant", content: "…" } });
+  emitSub("delta", { message: { role: "assistant", content: "â€¦" } });
 
   let responseText = "";
   try {
@@ -1021,7 +1046,7 @@ function execReadAgentContext(args) {
   const contextLines = messages.map((m) => {
     const role = m.role === "assistant" ? agent.name : "User";
     const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
-    return `[${role}]: ${content.slice(0, 800)}${content.length > 800 ? "…" : ""}`;
+    return `[${role}]: ${content.slice(0, 800)}${content.length > 800 ? "â€¦" : ""}`;
   });
   return JSON.stringify({
     ok: true,
@@ -1060,10 +1085,22 @@ function buildWorkspaceMap(root) {
 
 async function executeToolCall(tc, sendEvent, agentId = AGENT_ID) {
   const agent = agentRegistry.get(agentId) || { id: agentId, role: "developer", name: "Agent" };
-  const role = (agent.role || "").toLowerCase() || (agentId === AGENT_ID ? "pm" : "developer");
+  const rawRole = (agent.role || "").toLowerCase();
+  // The main orchestrator's registry role is the label "Orchestrator"; its capability key is "pm".
+  const role = rawRole === "orchestrator" ? "pm" : (rawRole || (agentId === AGENT_ID ? "pm" : "developer"));
   const workspaceRoot = process.cwd();
 
   console.log(`[hermes-adapter] Tool call: ${tc.name} by ${agent.name} (${role})`, JSON.stringify(tc.args).slice(0, 120));
+
+  // Deny-wins: team-management tools only for roles whose tool list includes them.
+  // Without this, a developer agent could spawn/dismiss agents via prompt injection.
+  const ORCHESTRATION_TOOLS = ["spawn_agent", "delegate_task", "list_team", "configure_agent", "dismiss_agent"];
+  if (ORCHESTRATION_TOOLS.includes(tc.name)) {
+    const roleDef = ROLE_DEFINITIONS[role] || ROLE_DEFINITIONS.developer;
+    if (!roleDef.tools.includes(tc.name)) {
+      return JSON.stringify({ ok: false, error: `Role ${role} cannot use ${tc.name}.` });
+    }
+  }
 
   switch (tc.name) {
     case "spawn_agent":          return execSpawnAgent(tc.args, sendEvent);
@@ -1166,7 +1203,7 @@ async function executeToolCall(tc, sendEvent, agentId = AGENT_ID) {
 }
 
 // ---------------------------------------------------------------------------
-// Agentic loop — handles multi-round tool-calling conversations
+// Agentic loop â€” handles multi-round tool-calling conversations
 // ---------------------------------------------------------------------------
 
 async function runAgenticLoop({ sessionKey, agentId, userMessage, model, tools, emitDelta, abortCheck, sendEvent }) {
@@ -1188,7 +1225,7 @@ async function runAgenticLoop({ sessionKey, agentId, userMessage, model, tools, 
     if (finishReason === "tool_calls" && toolCalls.length > 0) {
       // Inform user that tools are being executed (brief status text)
       const toolNames = toolCalls.map((t) => t.name).join(", ");
-      const statusText = textContent || `Executing: ${toolNames}…`;
+      const statusText = textContent || `Executing: ${toolNames}â€¦`;
       if (statusText) emitDelta(statusText);
 
       // Add assistant message with tool_calls to messages
@@ -1212,7 +1249,7 @@ async function runAgenticLoop({ sessionKey, agentId, userMessage, model, tools, 
       continue;
     }
 
-    // finish_reason = "stop" (or length/unknown) — we're done
+    // finish_reason = "stop" (or length/unknown) â€” we're done
     finalText = textContent;
     break;
   }
@@ -1243,77 +1280,77 @@ const HERMES_BUILTIN_SKILLS = [
     skillKey: "task-manager",
     name: "task-manager",
     description: "Capture actionable requests as persistent tasks and keep a shared Kanban task store in sync.",
-    emoji: "📋",
+    emoji: "ðŸ“‹",
     homepage: "https://github.com/iamlukethedev/Hermes3D",
   },
   {
     skillKey: "soundhermes",
     name: "soundhermes",
     description: "Play music, radio, and ambient audio from the office Jukebox.",
-    emoji: "📻",
+    emoji: "ðŸ“»",
     homepage: "https://github.com/iamlukethedev/Hermes3D",
   },
   {
     skillKey: "todo-board",
     name: "todo",
     description: "Maintain a shared workspace TODO list with blocked tasks.",
-    emoji: "✅",
+    emoji: "âœ…",
     homepage: "http://x.com/iamlukethedev/",
   },
   {
     skillKey: "caveman",
     name: "caveman",
     description: "Ultra-compact responses for fast terminal updates.",
-    emoji: "🍖",
+    emoji: "ðŸ–",
     homepage: "https://github.com/iamlukethedev/Hermes3D",
   },
   {
     skillKey: "telegram-remote",
     name: "telegram-remote",
     description: "Two-way Telegram bridge for mobile office notifications and control.",
-    emoji: "📱",
+    emoji: "ðŸ“±",
     homepage: "https://github.com/iamlukethedev/Hermes3D",
   },
   {
     skillKey: "web-research",
     name: "web-research",
     description: "Stealth web intelligence & scraping via Camoufox browser.",
-    emoji: "🌐",
+    emoji: "ðŸŒ",
     homepage: "https://github.com/iamlukethedev/Hermes3D",
   },
   {
     skillKey: "agent-reach",
     name: "agent-reach",
     description: "Social media and developer community intelligence playbook.",
-    emoji: "🎯",
+    emoji: "ðŸŽ¯",
     homepage: "https://github.com/prakhardixit/agent-reach",
   },
   {
     skillKey: "obsidian-skills",
     name: "obsidian-skills",
     description: "Connected Obsidian Vault with wikilinks and knowledge structures.",
-    emoji: "💎",
+    emoji: "ðŸ’Ž",
     homepage: "https://github.com/kepano/obsidian-skills",
   },
   {
     skillKey: "superpowers",
     name: "superpowers",
     description: "Rigorous software engineering discipline, TDD, and multi-gate verification.",
-    emoji: "⚡",
+    emoji: "âš¡",
     homepage: "https://github.com/obra/superpowers",
   },
   {
     skillKey: "humanizer",
     name: "humanizer",
     description: "Filter out repetitive AI patterns and robotic phrasing.",
-    emoji: "✍️",
+    emoji: "âœï¸",
     homepage: "https://github.com/humanizer-ai/humanizer",
   },
   {
     skillKey: "marketing-skills",
     name: "marketing-skills",
     description: "Conversion rate optimization, landing page analysis, and SEO copy.",
-    emoji: "📈",
+    emoji: "ðŸ“ˆ",
     homepage: "https://github.com/marketing-skills/hub",
   },
 ];
@@ -1360,7 +1397,7 @@ async function handleMethod(method, params, id, sendEvent) {
     case "agents.list": {
       const allAgents = [...agentRegistry.values()].map((agent) => ({
         id: agent.id, name: agent.name, workspace: agent.workspace,
-        identity: { name: agent.name, emoji: "🤖" },
+        identity: { name: agent.name, emoji: "ðŸ¤–" },
         role: agent.role,
       }));
       return resOk(id, { defaultId: AGENT_ID, mainKey: MAIN_KEY, agents: allAgents });
@@ -1371,7 +1408,7 @@ async function handleMethod(method, params, id, sendEvent) {
       const slug = agentName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
       const newId = `${slug}-${randomId().slice(0, 6)}`;
       const workspace = (typeof p.workspace === "string" && p.workspace)
-        ? p.workspace : `${HOME}/.hermes/workspace-${slug}`;
+        ? p.workspace : path.join(STATE_DIR, `workspace-${slug}`);
       agentRegistry.set(newId, {
         id: newId, name: agentName, workspace,
         role: "", systemPrompt: `You are ${agentName}.`,
@@ -1525,7 +1562,7 @@ async function handleMethod(method, params, id, sendEvent) {
       if (userMessage.startsWith("Create these exact skill files inside the current workspace")) {
         const sessionAgentId = sessionKey.startsWith("agent:") ? sessionKey.split(":")[1] : AGENT_ID;
         const agent = agentRegistry.get(sessionAgentId);
-        const agentWs = (agent && agent.workspace) ? agent.workspace : path.join(HOME, ".hermes", "workspace-hermes");
+        const agentWs = (agent && agent.workspace) ? agent.workspace : path.join(STATE_DIR, "workspace-hermes");
         try {
           const matches = [...userMessage.matchAll(/- path: ("(?:[^"\\]|\\.)*")\s+content: ("(?:[^"\\]|\\.)*")/g)];
           for (const match of matches) {
@@ -1801,8 +1838,8 @@ async function handleMethod(method, params, id, sendEvent) {
     case "skills.status": {
       const targetAgentId = typeof p.agentId === "string" ? p.agentId.trim() : AGENT_ID;
       const agent = agentRegistry.get(targetAgentId) || agentRegistry.get(AGENT_ID);
-      const wsDir = (agent && agent.workspace) ? agent.workspace : path.join(HOME, ".hermes", "workspace-hermes");
-      const managedSkillsDir = path.join(HOME, ".hermes", "skills");
+      const wsDir = (agent && agent.workspace) ? agent.workspace : path.join(STATE_DIR, "workspace-hermes");
+      const managedSkillsDir = path.join(STATE_DIR, "skills");
       return resOk(id, {
         workspaceDir: wsDir,
         managedSkillsDir,
@@ -2103,7 +2140,7 @@ function startAdapter() {
       return;
     }
     res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("Hermes Gateway Adapter – OK\n");
+    res.end("Hermes Gateway Adapter â€“ OK\n");
   });
 
   const wss = new WebSocketServer({ server: httpServer });
@@ -2189,11 +2226,11 @@ function startAdapter() {
   });
 
   httpServer.listen(ADAPTER_PORT, "127.0.0.1", () => {
-    console.log(`\n[hermes-adapter] ✓ Listening on ws://localhost:${ADAPTER_PORT}`);
-    console.log(`[hermes-adapter] ✓ Forwarding to Hermes API at ${HERMES_API_URL}`);
-    console.log(`[hermes-adapter] ✓ Model: ${HERMES_MODEL}`);
-    console.log(`[hermes-adapter] ✓ Multi-agent orchestration: ENABLED`);
-    console.log(`\nOpen Hermes3D → ws://localhost:${ADAPTER_PORT}\n`);
+    console.log(`\n[hermes-adapter] âœ“ Listening on ws://localhost:${ADAPTER_PORT}`);
+    console.log(`[hermes-adapter] âœ“ Forwarding to Hermes API at ${HERMES_API_URL}`);
+    console.log(`[hermes-adapter] âœ“ Model: ${HERMES_MODEL}`);
+    console.log(`[hermes-adapter] âœ“ Multi-agent orchestration: ENABLED`);
+    console.log(`\nOpen Hermes3D â†’ ws://localhost:${ADAPTER_PORT}\n`);
   });
 
   httpServer.on("error", (err) => {
@@ -2220,6 +2257,9 @@ module.exports = {
   agentRegistry,
   loadAgentsFromDisk,
   writeAgentsFile,
+  mergeHistory,
+  writeFileAtomic,
+  executeToolCall,
   resolveHermesEndpoint,
   resolveHermesBaseUrl,
   updateEnvFile,

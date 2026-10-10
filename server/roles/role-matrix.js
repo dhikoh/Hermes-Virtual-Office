@@ -20,7 +20,7 @@ const ROLE_DEFINITIONS = {
   [ROLES.PM]: {
     id: ROLES.PM,
     title: "Project Manager / Orchestrator",
-    tools: ["workspace_map", "spawn_agent", "delegate_task", "list_team", "read_agent_context", "write_plan"],
+    tools: ["workspace_map", "spawn_agent", "delegate_task", "list_team", "configure_agent", "dismiss_agent", "read_agent_context", "write_plan"],
     canReadWorkspaceCode: false, // PM only sees workspace_map (file paths & metadata), never full file contents
     canWriteWorkspaceCode: false,
     canShell: false,

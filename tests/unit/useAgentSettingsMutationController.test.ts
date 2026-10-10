@@ -1,5 +1,6 @@
 import { createElement, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup } from "@testing-library/react";
 import { act, render, waitFor } from "@testing-library/react";
 
 import type { AgentPermissionsDraft } from "@/features/agents/operations/agentPermissionsOperation";
@@ -277,6 +278,9 @@ describe("useAgentSettingsMutationController", () => {
   });
 
   afterEach(() => {
+    // globals are off, so RTL does not auto-unmount. Unmount explicitly so an earlier
+    // test's hook cannot overwrite restartBlockHookParams in a later one.
+    cleanup();
     vi.restoreAllMocks();
   });
 
@@ -409,8 +413,10 @@ describe("useAgentSettingsMutationController", () => {
       expect(ctx.getValue().hasRestartBlockInProgress).toBe(true);
     });
 
+    // Hook params are only set during a render. Under parallel load the latest render may land
+    // after the controller state assertions, so read params inside waitFor, then trigger the handler.
     await waitFor(() => {
-      expect(restartBlockHookParams?.block).not.toBeNull();
+      expect(restartBlockHookParams).not.toBeNull();
     });
 
     const timeoutHookParams = restartBlockHookParams;
@@ -419,7 +425,9 @@ describe("useAgentSettingsMutationController", () => {
     await act(async () => {
       timeoutHookParams!.onTimeout();
     });
-    expect(ctx.setError).toHaveBeenCalledWith("Gateway restart timed out after renaming the agent.");
+    await waitFor(() => {
+      expect(ctx.setError).toHaveBeenCalledWith("Gateway restart timed out after renaming the agent.");
+    });
 
     mockedRunLifecycle.mockImplementation(async ({ deps }) => {
       deps.setQueuedBlock();

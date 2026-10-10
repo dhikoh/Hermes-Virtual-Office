@@ -27,6 +27,8 @@ FROM node:22-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# Persistent state (agent roster, chat history, settings) lives in the mounted volume.
+ENV HERMES_STATE_DIR=/app/.hermes
 
 # Install runtime libraries for Firefox / Camoufox anti-detect headless & virtual browser execution
 RUN apt-get update && apt-get install -y --no-install-recommends \

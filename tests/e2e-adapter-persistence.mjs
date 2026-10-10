@@ -11,7 +11,9 @@ const WebSocket = require("ws");
 const ADAPTER = path.resolve(import.meta.dirname, "../server/hermes-gateway-adapter.js");
 const PORT = "18790";
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-e2e-"));
-const env = { ...process.env, USERPROFILE: home, HOME: home, HERMES_ADAPTER_PORT: PORT };
+// State dir is separate from HOME on purpose: proves HERMES_STATE_DIR (used by Docker volume) is honored.
+const stateDir = path.join(home, "state-volume");
+const env = { ...process.env, USERPROFILE: home, HOME: home, HERMES_ADAPTER_PORT: PORT, HERMES_STATE_DIR: stateDir };
 
 function startAdapter() {
   return new Promise((resolve, reject) => {
@@ -63,8 +65,9 @@ await new Promise((r) => setTimeout(r, 1200)); // let debounce flush (500ms)
 proc.kill("SIGTERM");
 await new Promise((r) => proc.once("exit", r));
 
-const agentsFile = path.join(home, ".hermes", "hermes3d-agents.json");
-assert(fs.existsSync(agentsFile), "agents file written to disk");
+const agentsFile = path.join(stateDir, "hermes3d-agents.json");
+assert(fs.existsSync(agentsFile), "agents file written to HERMES_STATE_DIR");
+assert(!fs.existsSync(path.join(home, ".hermes", "hermes3d-agents.json")), "agents file NOT written to HOME/.hermes");
 
 proc = await startAdapter();
 ws = await connect();

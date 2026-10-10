@@ -1,12 +1,17 @@
 # Hermes3D Patch Notes
 
 ## Patch v1.0.13 - Agent Roster Persistence
-- **Bug Fix (Sub-agents lost on restart)**: `agentRegistry` lived only in memory. Spawned, configured, and dismissed agents were not written to disk, so after a server restart the chat history remained while the agents were gone. Roster now persists to `~/.hermes/hermes3d-agents.json` on every spawn, configure, dismiss, `agents.create`, `agents.update`, and `agents.delete`, and is loaded at startup before history.
-- **Persistence Safety**: Writes are debounced (500ms) and flushed synchronously on `SIGINT`, `SIGTERM`, and `exit`, so the last change is not lost. A corrupt agents file logs a warning and does not crash the adapter.
-- **Single Source of History**: Removed the `/tmp`, `D:/tmp`, and cwd fallback copies of `hermes3d-history.json`. Only `~/.hermes/hermes3d-history.json` is read or written.
-- **Workspace Creation**: `spawn_agent` and `agents.create` now create the agent workspace folder.
-- **Verification**: `tests/unit/agentRegistryPersistence.test.ts` (round-trip and corrupt file) and `tests/e2e-adapter-persistence.mjs` (real WebSocket: create, kill, restart, `agents.list`, delete). Run with `npm run test:e2e-adapter`. The E2E test fails against the previous code.
-- **Known Limits**: History merge still prefers the longer array rather than newest timestamp. Writes are not atomic (no tmp and rename).
+- **Bug Fix (Sub-agents lost on restart)**: `agentRegistry` lived only in memory. Spawned, configured, and dismissed agents were not written to disk, so after a server restart the chat history remained while the agents were gone. Roster now persists to `hermes3d-agents.json` on every spawn, configure, dismiss, `agents.create`, `agents.update`, and `agents.delete`, and is loaded at startup before history.
+- **State Directory**: Adapter files (roster, history, config, workspaces, skills) now resolve from one directory: `HERMES_STATE_DIR`, falling back to `~/.hermes`. This is the same variable `studio-settings.js` uses. `Dockerfile` and `docker-compose.yml` set `HERMES_STATE_DIR=/app/.hermes`, which is the mounted volume, so roster and history survive container restarts.
+- **Atomic Writes**: History and roster write to a temp file and rename over the target, so a crash mid-write keeps the previous complete file.
+- **History Merge**: Replaced the longest-array-wins merge with `mergeHistory`, which keeps both sides, dedupes identical messages, and orders by timestamp when present.
+- **Persistence Safety**: Writes are debounced (500ms) and flushed synchronously on `SIGINT`, `SIGTERM`, and `exit`. A corrupt agents file logs a warning and does not crash the adapter.
+- **Single Source of History**: Removed the `/tmp`, `D:/tmp`, and cwd fallback copies of `hermes3d-history.json`.
+- **Role Guard for Team Tools**: `spawn_agent`, `delegate_task`, `list_team`, `configure_agent`, and `dismiss_agent` now check the caller's role before running. Previously a non-PM agent could reach them via prompt injection. `configure_agent` and `dismiss_agent` were added to the PM role so the orchestrator keeps access. The orchestrator's registry role `Orchestrator` maps to capability key `pm`.
+- **Workspace Creation**: `spawn_agent` and `agents.create` create the agent workspace folder.
+- **Flaky Test Fix**: `useAgentSettingsMutationController.test.ts` failed 1 in 3 to 5 parallel runs. Root cause: `@testing-library/react` auto-cleanup is off (`globals` not set), so earlier renders kept writing the shared hook-params variable. Fixed with explicit `cleanup()` in `afterEach`. Verified 6/6 parallel runs pass.
+- **Verification**: `tests/unit/agentRegistryPersistence.test.ts` (5 tests: round-trip, corrupt file, history merge, atomic write, role guard) and `tests/e2e-adapter-persistence.mjs` (real WebSocket: create, kill, restart, `agents.list`, delete, state dir honored). Run with `npm run test:e2e-adapter`. The E2E test fails against the previous code. Full suite: 200 files, 1314 tests pass.
+- **Known Limits**: UI roster check is not in this patch. `npm run dev` currently fails to compile `/office` because of a pre-existing Tailwind CSS parse error caused by the arbitrary class `[&::-webkit-details-marker]:hidden` in `src/features/agents/components/AgentChatPanel.tsx:302`. Fix that before verifying the roster in the browser.
 
 ## Patch v1.0.12 - Security Hardening, Audit Remediation & Engine Deduplication
 - **Security Hardening (Multi-User Auth Blocker - S1)**: Upgraded `server/access-gate.js` with `required` mode support. In multi-user deployment (`MULTI_USER=true`), missing or empty tokens are strictly rejected instead of bypassing access checks. `server/index.js` now verifies credentials on startup in multi-user mode.
