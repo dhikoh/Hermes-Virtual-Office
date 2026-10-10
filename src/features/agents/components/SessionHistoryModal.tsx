@@ -34,26 +34,37 @@ export function SessionHistoryModal({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!open) return;
-    if (!client) {
-      setLoading(false);
+    if (!open || !client) {
       return;
     }
-    setLoading(true);
+    let isCancelled = false;
+    queueMicrotask(() => {
+      if (!isCancelled) setLoading(true);
+    });
+
     client
       .call<{ sessions: SessionListEntry[] }>("sessions.list", {})
       .then((res: { sessions?: SessionListEntry[] }) => {
+        if (isCancelled) return;
         const agentSessions = (res.sessions || [])
           .filter((s: SessionListEntry) => s.agentId === agentId)
           .sort((a: SessionListEntry, b: SessionListEntry) => (b.updatedAt || 0) - (a.updatedAt || 0));
         setSessions(agentSessions);
       })
       .catch((err: unknown) => {
-        console.error("Failed to load sessions:", err);
+        if (!isCancelled) {
+          console.error("Failed to load sessions:", err);
+        }
       })
       .finally(() => {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [open, agentId, client]);
 
   const handleDelete = async (e: React.MouseEvent, key: string) => {

@@ -7,6 +7,7 @@ import type { GatewayStatus } from "@/lib/gateway/GatewayClient";
 export interface GatewayContextValue {
   client: GatewayBrowserClient | null;
   status: GatewayStatus;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sendCommand: <T = any>(method: string, params?: Record<string, unknown>) => Promise<T>;
 }
 
@@ -27,6 +28,7 @@ export function GatewayProvider({
     return {
       client,
       status,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       sendCommand: async <T = any>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
         if (!client) {
           throw new Error("Gateway client is not connected");

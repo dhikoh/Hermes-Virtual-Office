@@ -2432,4 +2432,5 @@ module.exports = {
   createAgentEntry,
   slugify,
   flushPersistence,
+  HERMES_BUILTIN_SKILLS,
 };

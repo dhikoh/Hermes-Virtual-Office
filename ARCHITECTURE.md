@@ -40,24 +40,38 @@ Agent records, sessions, approvals, runtime streams, and agent files belong to t
 
 Hermes3D may read and mutate that state through gateway APIs, but it should not create a competing local source of truth.
 
-### 2. Studio-owned local state
+### 2. Studio-owned local state and single state directory
 Studio stores local settings such as:
 
 - gateway URL and token,
 - focused agent and related UI preferences,
 - office layout and local presentation state.
 
-These settings live under the local Hermes state directory (`~/.hermes`) and are accessed through server routes, not directly from the browser.
+All persistent local state—including Studio settings (`hermes3d/settings.json`), adapter configuration (`api_providers.json`), agent rosters (`hermes3d-agents.json`), chat histories (`hermes3d-history.json`), and brain archives—resolves through a single canonical state directory via `resolveStateDir()`.
+- Default host location: `~/.hermes` (overridable via `HERMES_STATE_DIR`).
+- Containerized Docker location: `/app/.hermes` mounted to a persistent volume.
+- These settings and state files are accessed through server routes and server modules, never directly from browser components.
 
-### 3. Client-server boundary
+### 3. Role, capability, and tool boundaries
+Agents are categorized by role definitions in `server/lib/roles.js`:
+- Each role declares granular capabilities (such as `execute_code`, `web_search`, `read_filesystem`, `write_filesystem`, `delegate`).
+- Tool provisioning is capability-aware: agents (including delegated subagents) are provided only the tools permitted by their role's capabilities.
+- Defense-in-depth enforcement: tool execution requests are validated against `validateRoleAction` before invocation.
+
+### 4. Client-server boundary
 Client components should not read or write the local filesystem directly.
 
 Anything that touches files, environment-backed settings, or SSH helpers belongs on the server side.
 
-### 4. Browser-gateway boundary
+### 5. Browser-gateway boundary
 The browser does not connect directly to the upstream gateway. It connects to Studio over a same-origin WebSocket, and Studio opens the upstream gateway connection on the server.
 
 This keeps the upstream connection server-managed and makes local, remote, and tunneled setups easier to support. The current UI still loads the configured upstream URL/token into browser memory at runtime, so the browser remains part of the active trust boundary.
+
+### 6. Process supervision and unified launcher
+A single orchestrator script (`server/start-stack.js`) supervises both the Gateway Adapter and Next.js applications:
+- Used for unified local development (`npm run dev:all`) and production (`npm start`).
+- Manages synchronized startup, health readiness, and graceful shutdown (SIGINT/SIGTERM handlers with Windows tree-kill support).
 
 ## Main Flows
 ### Connection flow

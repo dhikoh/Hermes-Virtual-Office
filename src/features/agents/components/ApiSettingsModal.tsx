@@ -11,7 +11,9 @@ type Provider = {
 
 type ApiSettingsModalProps = {
   onClose: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   client?: { call: <T = any>(method: string, params?: Record<string, unknown>) => Promise<T> } | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sendCommand?: <T = any>(method: string, params?: Record<string, unknown>) => Promise<T>;
   onProviderActivated?: (info?: { models?: string[]; defaultModel?: string; providerId?: string }) => void;
 };
@@ -28,6 +30,7 @@ export function sanitizeProviderBaseUrl(url: string): string {
 
 export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand, onProviderActivated }: ApiSettingsModalProps) => {
   const gateway = useGateway();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sendCommand = propSendCommand || (client ? <T = any>(method: string, params: Record<string, unknown> = {}) => client.call<T>(method, params) : gateway.sendCommand);
   
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -142,14 +145,15 @@ export const ApiSettingsModal = ({ onClose, client, sendCommand: propSendCommand
     setActiveMessage("");
     const cleanUrl = normalizeUrl(apiUrl);
     try {
-      const res = await sendCommand("config.test", { apiUrl: cleanUrl, apiKey });
-      if (res.success) {
+      const res = await sendCommand<{ success?: boolean; count?: number; error?: string }>("config.test", { apiUrl: cleanUrl, apiKey });
+      if (res?.success) {
         setTestResult({ ok: true, message: `Success! Found ${res.count} models.` });
       } else {
-        setTestResult({ ok: false, message: res.error || "Connection failed" });
+        setTestResult({ ok: false, message: res?.error || "Connection failed" });
       }
-    } catch (err: any) {
-      setTestResult({ ok: false, message: err.message || "Failed to test connection" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to test connection";
+      setTestResult({ ok: false, message });
     } finally {
       setIsTesting(false);
     }

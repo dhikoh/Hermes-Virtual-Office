@@ -260,7 +260,9 @@ Common environment variables:
 - If `HERMES3D_GATEWAY_URL` is not set, Studio can still surface local Hermes or demo adapter defaults from `HERMES_ADAPTER_PORT` / `DEMO_ADAPTER_PORT`.
 - `HERMES_API_URL` points the gateway adapter at the Hermes HTTP API. It defaults to `http://localhost:8642`.
 - Hermes file defaults come from `~/.hermes/hermes.json` when present.
-- `HERMES_STATE_DIR` and `HERMES_CONFIG_PATH` override the default Hermes paths.
+- `HERMES_STATE_DIR` overrides the canonical state directory for Studio settings, adapter configuration (`api_providers.json`), agent rosters, and history (defaults to `~/.hermes`, or `/app/.hermes` in Docker).
+- `HERMES_CONFIG_PATH` overrides the default Hermes config path.
+- `MULTI_USER` enables multi-user mode authentication guard.
 - `HERMES_GATEWAY_SSH_TARGET`, `HERMES_GATEWAY_SSH_USER`, `HERMES_GATEWAY_SSH_PORT`, and `HERMES_GATEWAY_SSH_STRICT_HOST_KEY_CHECKING` support advanced gateway-host operations over SSH when needed.
 - `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, and `ELEVENLABS_MODEL_ID` enable voice reply integration.
 
@@ -268,14 +270,17 @@ See [`.env.example`](.env.example) for the full local development template.
 
 ## Scripts
 
-- `npm run dev` starts the Studio dev server.
-- `npm run hermes-adapter` starts the Hermes WebSocket adapter.
+- `npm run dev:all` starts the unified local stack (Hermes gateway adapter + Next.js dev server).
+- `npm run dev` starts the Studio Next.js dev server alone.
+- `npm run hermes-adapter` starts the Hermes WebSocket adapter alone.
 - `npm run demo-gateway` starts the built-in mock gateway for demo mode.
 - `npm run build` builds the production Next.js app.
-- `npm run start` starts the production server.
+- `npm start` starts the unified production stack (`server/start-stack.js`).
 - `npm run lint` runs ESLint.
 - `npm run typecheck` runs TypeScript without emitting output.
 - `npm run test` runs unit tests with Vitest.
+- `npm run test:e2e-adapter` runs gateway adapter end-to-end tests.
+- `npm run test:e2e-roles` runs multi-agent role & tool delegation end-to-end tests.
 - `npm run e2e` runs Playwright tests.
 - `npm run studio:setup` prepares common local Studio prerequisites.
 - `npm run smoke:dev-server` runs a basic dev-server smoke check.
