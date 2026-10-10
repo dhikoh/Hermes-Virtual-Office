@@ -299,7 +299,7 @@ const ThinkingDetailsRow = memo(function ThinkingDetailsRow({
       className="ui-chat-thinking group rounded-md px-2 py-1.5 text-[10px] shadow-2xs"
     >
       <summary
-        className="flex cursor-pointer list-none items-center gap-2 opacity-65 [&::-webkit-details-marker]:hidden"
+        className="ui-thinking-summary flex cursor-pointer list-none items-center gap-2 opacity-65"
         onClick={(event) => {
           event.preventDefault();
           setOpen((current) => !current);

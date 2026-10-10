@@ -1052,6 +1052,12 @@ textarea:focus::-webkit-scrollbar {
   color: var(--status-idle-fg);
 }
 
+/* Hide the native disclosure marker on <summary>. Plain CSS: the Tailwind arbitrary
+   variant [&::-webkit-details-marker] produced invalid CSS and broke the whole stylesheet. */
+.ui-thinking-summary::-webkit-details-marker {
+  display: none;
+}
+
 .ui-scroll {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklch, var(--border) 60%, transparent) transparent;
