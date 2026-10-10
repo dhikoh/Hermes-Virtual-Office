@@ -87,10 +87,7 @@ async function main() {
   });
   const handle = app.getRequestHandler();
 
-  const isMultiUser =
-    process.env.MULTI_USER === "true" ||
-    process.env.STUDIO_MULTI_USER === "true" ||
-    process.env.REQUIRE_AUTH === "true";
+  const isMultiUser = process.env.MULTI_USER === "true";
 
   if (isMultiUser && !activeToken) {
     throw new Error(

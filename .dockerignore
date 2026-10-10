@@ -10,3 +10,8 @@ coverage
 .env.local
 .env.development
 .env.production
+api_providers.json
+.hermes
+_AI
+hermes3d-*.json
+*.log

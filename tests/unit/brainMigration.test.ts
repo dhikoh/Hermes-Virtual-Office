@@ -103,4 +103,53 @@ describe("Brain Migration Engine (Option 1)", () => {
       unpackTarGz(compressed, testTmpDir);
     }).toThrow(/Security Violation: Malicious path detected/);
   });
+
+  it("exports and imports with custom stateDir distinct from cwd and home (WP6)", () => {
+    const wsSrc = path.join(testTmpDir, "ws-src");
+    const stateSrc = path.join(testTmpDir, "custom-state-src");
+    const wsDest = path.join(testTmpDir, "ws-dest");
+    const stateDest = path.join(testTmpDir, "custom-state-dest");
+    const archivePath = path.join(testTmpDir, "state-backup.tar.gz");
+
+    mkdirSync(wsSrc, { recursive: true });
+    mkdirSync(stateSrc, { recursive: true });
+    mkdirSync(wsDest, { recursive: true });
+    mkdirSync(stateDest, { recursive: true });
+
+    writeFileSync(path.join(wsSrc, "MEMORY.md"), "# Project Memory", "utf8");
+    writeFileSync(
+      path.join(stateSrc, "hermes3d-agents.json"),
+      JSON.stringify({ version: 2, main: { name: "Hermes" }, agents: [{ id: "ag-1", name: "Agent1" }] }),
+      "utf8"
+    );
+    writeFileSync(
+      path.join(stateSrc, "hermes3d-history.json"),
+      JSON.stringify({ "session:main": [{ role: "user", content: "hello" }] }),
+      "utf8"
+    );
+    writeFileSync(
+      path.join(stateSrc, "api_providers.json"),
+      JSON.stringify({ activeProviderId: "custom", providers: [{ id: "custom", name: "Custom" }] }),
+      "utf8"
+    );
+
+    const exportRes = createBrainArchive(wsSrc, archivePath, { stateDir: stateSrc });
+    expect(exportRes.fileCount).toBe(4);
+
+    const restoreRes = restoreBrainArchive(archivePath, wsDest, { stateDir: stateDest });
+    expect(restoreRes.fileCount).toBe(4);
+
+    expect(existsSync(path.join(wsDest, "MEMORY.md"))).toBe(true);
+    expect(existsSync(path.join(stateDest, "hermes3d-agents.json"))).toBe(true);
+    expect(existsSync(path.join(stateDest, "hermes3d-history.json"))).toBe(true);
+    expect(existsSync(path.join(stateDest, "api_providers.json"))).toBe(true);
+
+    const reloadedAgents = JSON.parse(readFileSync(path.join(stateDest, "hermes3d-agents.json"), "utf8"));
+    expect(reloadedAgents.version).toBe(2);
+    expect(reloadedAgents.agents[0].id).toBe("ag-1");
+
+    // Clean up
+    rmSync(testTmpDir, { recursive: true, force: true });
+  });
 });
+

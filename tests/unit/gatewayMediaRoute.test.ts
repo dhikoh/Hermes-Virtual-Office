@@ -153,5 +153,59 @@ describe("/api/gateway/media route", () => {
 
     fs.rmSync(symlinkPath, { force: true });
   });
+
+  it("accepts file within custom HERMES_STATE_DIR (WP6)", async () => {
+    tempDir = makeTempDir("gateway-media-custom-state");
+    process.env.HERMES_STATE_DIR = tempDir;
+    writeStudioSettings(tempDir, "ws://localhost:18789");
+
+    const validImg = path.join(tempDir, "sample.png");
+    fs.writeFileSync(validImg, Buffer.from("fake-image-bytes"));
+
+    const response = await GET(
+      new Request(`http://localhost/api/gateway/media?path=${encodeURIComponent(validImg)}`)
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("image/png");
+  });
+
+  it("rejects file outside custom HERMES_STATE_DIR (WP6)", async () => {
+    tempDir = makeTempDir("gateway-media-inside");
+    process.env.HERMES_STATE_DIR = tempDir;
+    writeStudioSettings(tempDir, "ws://localhost:18789");
+
+    const outsideDir = makeTempDir("gateway-media-outside");
+    const outsideImg = path.join(outsideDir, "outside.png");
+    fs.writeFileSync(outsideImg, Buffer.from("outside-bytes"));
+
+    try {
+      const response = await GET(
+        new Request(`http://localhost/api/gateway/media?path=${encodeURIComponent(outsideImg)}`)
+      );
+
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { error?: string };
+      expect(body.error).toMatch(/Refusing to read media outside/i);
+    } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects path traversal attempting to escape HERMES_STATE_DIR (WP6)", async () => {
+    tempDir = makeTempDir("gateway-media-traversal");
+    process.env.HERMES_STATE_DIR = tempDir;
+    writeStudioSettings(tempDir, "ws://localhost:18789");
+
+    const traversalPath = path.join(tempDir, "..", "escape.png");
+    const response = await GET(
+      new Request(`http://localhost/api/gateway/media?path=${encodeURIComponent(traversalPath)}`)
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error?: string };
+    expect(body.error).toMatch(/Refusing to read media outside/i);
+  });
 });
+
 

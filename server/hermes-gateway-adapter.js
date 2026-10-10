@@ -79,9 +79,8 @@ let HERMES_API_KEY = process.env.HERMES_API_KEY || "";
 const ADAPTER_PORT = parseInt(process.env.HERMES_ADAPTER_PORT || "18789", 10);
 let HERMES_MODEL = process.env.HERMES_MODEL || "hermes";
 const HERMES_AGENT_NAME = process.env.HERMES_AGENT_NAME || "Hermes";
-const HOME = process.env.USERPROFILE || process.env.HOME || (process.platform === "win32" ? process.cwd() : "/tmp");
-// Single state dir for all adapter files. Same env var as studio-settings.js so Docker volume covers both.
-const STATE_DIR = process.env.HERMES_STATE_DIR?.trim() || path.join(HOME, ".hermes");
+const { resolveStateDir } = require("./lib/state-dir");
+const STATE_DIR = resolveStateDir(process.env);
 
 const AGENT_ID = "hermes";
 const MAIN_KEY = "main";
@@ -705,7 +704,19 @@ function updateEnvFile(filePath, updates) {
   fs.writeFileSync(filePath, content, "utf8");
 }
 
+function migrateProvidersFileIfNeeded() {
+  const targetFile = path.join(STATE_DIR, "api_providers.json");
+  const legacyFile = path.join(process.cwd(), "api_providers.json");
+  try {
+    if (!fs.existsSync(targetFile) && fs.existsSync(legacyFile)) {
+      fs.mkdirSync(STATE_DIR, { recursive: true });
+      fs.copyFileSync(legacyFile, targetFile);
+    }
+  } catch {}
+}
+
 function readProvidersData() {
+  migrateProvidersFileIfNeeded();
   const providersFile = path.join(STATE_DIR, "api_providers.json");
   let providers = [];
   let activeProviderId = null;

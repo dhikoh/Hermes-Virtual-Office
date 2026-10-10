@@ -2,33 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const STATE_DIRNAME = ".hermes";
-
-const resolveUserPath = (input) => {
-  const trimmed = String(input ?? "").trim();
-  if (!trimmed) return trimmed;
-  if (trimmed.startsWith("~")) {
-    const expanded = trimmed.replace(/^~(?=$|[\\/])/, os.homedir());
-    return path.resolve(expanded);
-  }
-  return path.resolve(trimmed);
-};
-
-const resolveDefaultHomeDir = () => {
-  const home = os.homedir();
-  if (home) {
-    try {
-      if (fs.existsSync(home)) return home;
-    } catch {}
-  }
-  return os.tmpdir();
-};
-
-const resolveStateDir = (env = process.env) => {
-  const override = env.HERMES_STATE_DIR?.trim();
-  if (override) return resolveUserPath(override);
-  return path.join(resolveDefaultHomeDir(), STATE_DIRNAME);
-};
+const { resolveStateDir, resolveUserPath, resolveDefaultHomeDir, STATE_DIRNAME } = require("./lib/state-dir");
 
 const resolveStudioSettingsPath = (env = process.env) => {
   return path.join(resolveStateDir(env), "hermes3d", "settings.json");

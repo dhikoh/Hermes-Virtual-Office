@@ -16,11 +16,18 @@ const WS_PORT = "18797";
 const tempBase = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-roles-e2e-"));
 const stateDir = path.join(tempBase, "state");
 fs.mkdirSync(stateDir, { recursive: true });
+fs.writeFileSync(
+  path.join(stateDir, "api_providers.json"),
+  JSON.stringify({
+    activeProviderId: "mock",
+    providers: [{ id: "mock", name: "Mock LLM", url: `http://127.0.0.1:${MOCK_LLM_PORT}`, key: "test-key" }],
+  }, null, 2)
+);
 
 const targetFileName = "delegated_task_output.txt";
 const targetFileContent = "Automated test content written by delegated developer.";
 
-let requestCount = 0;
+let _requestCount = 0;
 
 // Fake OpenAI-compatible server (SSE streaming)
 const mockServer = http.createServer((req, res) => {
@@ -28,7 +35,7 @@ const mockServer = http.createServer((req, res) => {
     let bodyStr = "";
     req.on("data", (chunk) => (bodyStr += chunk.toString("utf8")));
     req.on("end", () => {
-      requestCount++;
+      _requestCount++;
       const body = JSON.parse(bodyStr || "{}");
       res.writeHead(200, {
         "Content-Type": "text/event-stream",

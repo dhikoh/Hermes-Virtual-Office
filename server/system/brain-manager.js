@@ -15,6 +15,13 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
+const { resolveStateDir } = require("../lib/state-dir");
+
+function resolveEffectiveStateDir(workspaceDir, options = {}) {
+  if (options && options.stateDir) return path.resolve(options.stateDir);
+  if (process.env.HERMES_STATE_DIR) return resolveStateDir(process.env);
+  return path.join(workspaceDir, ".hermes");
+}
 
 const CORE_FILES = [
   "MEMORY.md",
@@ -105,58 +112,127 @@ function packDirEntry(relPath) {
   return Buffer.concat(chunks);
 }
 
-function collectWorkspaceFiles(workspaceDir) {
+function collectWorkspaceFiles(workspaceDir, stateDir) {
   const entries = [];
+  const seenRelPaths = new Set();
 
   // 1. Core single files
   for (const filename of CORE_FILES) {
-    const filePath = path.join(workspaceDir, filename);
+    let filePath = path.join(workspaceDir, filename);
+    if (filename === "api_providers.json" && stateDir) {
+      const stateProviders = path.join(stateDir, "api_providers.json");
+      if (fs.existsSync(stateProviders) && fs.statSync(stateProviders).isFile()) {
+        filePath = stateProviders;
+      }
+    }
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
       entries.push({
         relPath: filename,
         absPath: filePath,
         isDir: false,
       });
+      seenRelPaths.add(filename);
+      if (filename === "api_providers.json") {
+        seenRelPaths.add(path.join(".hermes", "api_providers.json"));
+      }
     }
   }
 
-  // 2. Core directories recursively
-  for (const dirName of CORE_DIRS) {
-    const dirPath = path.join(workspaceDir, dirName);
-    if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
-      walkDir(dirPath, workspaceDir, entries);
+  // 2. _AI folder from workspace
+  const aiDir = path.join(workspaceDir, "_AI");
+  if (fs.existsSync(aiDir) && fs.statSync(aiDir).isDirectory()) {
+    walkDir(aiDir, workspaceDir, entries, seenRelPaths);
+  }
+
+  // 3. .hermes folder from stateDir
+  if (stateDir && fs.existsSync(stateDir) && fs.statSync(stateDir).isDirectory()) {
+    walkStateDir(stateDir, entries, seenRelPaths);
+  }
+
+  // 4. Snapshots if located in workspace and distinct from stateDir
+  if (stateDir) {
+    const localSnapshots = path.join(workspaceDir, ".hermes", "snapshots");
+    const stateSnapshots = path.join(stateDir, "snapshots");
+    if (
+      path.resolve(localSnapshots) !== path.resolve(stateSnapshots) &&
+      fs.existsSync(localSnapshots) &&
+      fs.statSync(localSnapshots).isDirectory()
+    ) {
+      walkDir(localSnapshots, workspaceDir, entries, seenRelPaths);
     }
   }
 
   return entries;
 }
 
-function walkDir(currentDir, baseDir, entries) {
+function walkStateDir(stateDir, entries, seenRelPaths) {
+  const items = fs.readdirSync(stateDir, { withFileTypes: true });
+  for (const item of items) {
+    const itemPath = path.join(stateDir, item.name);
+    if (item.name.endsWith(".sock") || item.name.endsWith(".lock")) continue;
+    const relPath = path.join(".hermes", item.name);
+    if (seenRelPaths.has(relPath)) continue;
+
+    if (item.isDirectory()) {
+      entries.push({ relPath, absPath: itemPath, isDir: true });
+      seenRelPaths.add(relPath);
+      walkSubDir(itemPath, stateDir, entries, seenRelPaths, ".hermes");
+    } else if (item.isFile()) {
+      entries.push({ relPath, absPath: itemPath, isDir: false });
+      seenRelPaths.add(relPath);
+    }
+  }
+}
+
+function walkSubDir(currentDir, baseDir, entries, seenRelPaths, prefix = "") {
+  const items = fs.readdirSync(currentDir, { withFileTypes: true });
+  for (const item of items) {
+    const itemPath = path.join(currentDir, item.name);
+    if (item.name.endsWith(".sock") || item.name.endsWith(".lock")) continue;
+    const relFromBase = path.relative(baseDir, itemPath);
+    const relPath = prefix ? path.join(prefix, relFromBase) : relFromBase;
+    if (seenRelPaths.has(relPath)) continue;
+
+    if (item.isDirectory()) {
+      entries.push({ relPath, absPath: itemPath, isDir: true });
+      seenRelPaths.add(relPath);
+      walkSubDir(itemPath, baseDir, entries, seenRelPaths, prefix);
+    } else if (item.isFile()) {
+      entries.push({ relPath, absPath: itemPath, isDir: false });
+      seenRelPaths.add(relPath);
+    }
+  }
+}
+
+function walkDir(currentDir, baseDir, entries, seenRelPaths = new Set()) {
   const items = fs.readdirSync(currentDir, { withFileTypes: true });
   const relDir = path.relative(baseDir, currentDir);
-  if (relDir && relDir !== ".") {
+  if (relDir && relDir !== "." && !seenRelPaths.has(relDir)) {
     entries.push({
       relPath: relDir,
       absPath: currentDir,
       isDir: true,
     });
+    seenRelPaths.add(relDir);
   }
 
   for (const item of items) {
     const itemPath = path.join(currentDir, item.name);
-    // Ignore socket files or temporary lock files
     if (item.name.endsWith(".sock") || item.name.endsWith(".lock")) {
       continue;
     }
     if (item.isDirectory()) {
-      walkDir(itemPath, baseDir, entries);
+      walkDir(itemPath, baseDir, entries, seenRelPaths);
     } else if (item.isFile()) {
       const relPath = path.relative(baseDir, itemPath);
-      entries.push({
-        relPath,
-        absPath: itemPath,
-        isDir: false,
-      });
+      if (!seenRelPaths.has(relPath)) {
+        entries.push({
+          relPath,
+          absPath: itemPath,
+          isDir: false,
+        });
+        seenRelPaths.add(relPath);
+      }
     }
   }
 }
@@ -164,13 +240,14 @@ function walkDir(currentDir, baseDir, entries) {
 /**
  * Creates a .tar.gz archive of the workspace brain
  */
-function createBrainArchive(workspaceDir, outputPath = null, _options = {}) {
+function createBrainArchive(workspaceDir, outputPath = null, options = {}) {
   const ws = path.resolve(workspaceDir);
   if (!fs.existsSync(ws)) {
     throw new Error(`Workspace path does not exist: ${ws}`);
   }
 
-  const entries = collectWorkspaceFiles(ws);
+  const stateDir = resolveEffectiveStateDir(ws, options);
+  const entries = collectWorkspaceFiles(ws, stateDir);
   const tarChunks = [];
   const manifest = {
     version: "1.0",
@@ -232,12 +309,13 @@ function createBrainArchive(workspaceDir, outputPath = null, _options = {}) {
 /**
  * Parses and extracts a .tar.gz brain archive
  */
-function unpackTarGz(archiveBuffer, targetWorkspaceDir) {
+function unpackTarGz(archiveBuffer, targetWorkspaceDir, options = {}) {
   const tarBuffer = zlib.gunzipSync(archiveBuffer);
   let offset = 0;
   let nextLongName = null;
   const restoredFiles = [];
   const targetDir = path.resolve(targetWorkspaceDir);
+  const stateDir = resolveEffectiveStateDir(targetDir, options);
 
   while (offset + 512 <= tarBuffer.length) {
     const header = tarBuffer.subarray(offset, offset + 512);
@@ -285,10 +363,19 @@ function unpackTarGz(archiveBuffer, targetWorkspaceDir) {
       throw new Error(`Security Violation: Malicious path detected in archive: ${entryPath}`);
     }
 
+    let destPath;
+    if (entryPath.startsWith(".hermes/")) {
+      const subPath = entryPath.slice(".hermes/".length);
+      destPath = path.join(stateDir, subPath);
+    } else if (entryPath === ".hermes" && (typeflag === "5" || entryPath.endsWith("/"))) {
+      destPath = stateDir;
+    } else {
+      destPath = path.join(targetDir, entryPath);
+    }
+
     if (typeflag === "5" || entryPath.endsWith("/")) {
       // Directory entry
-      const fullDir = path.join(targetDir, entryPath);
-      fs.mkdirSync(fullDir, { recursive: true });
+      fs.mkdirSync(destPath, { recursive: true });
       offset = dataEnd + dataPad;
       continue;
     }
@@ -297,9 +384,18 @@ function unpackTarGz(archiveBuffer, targetWorkspaceDir) {
     const fileContent = tarBuffer.subarray(offset, offset + size);
     offset = dataEnd + dataPad;
 
-    const destPath = path.join(targetDir, entryPath);
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
     fs.writeFileSync(destPath, fileContent);
+
+    if (entryPath === "api_providers.json") {
+      const stateProviders = path.join(stateDir, "api_providers.json");
+      if (path.resolve(destPath) !== path.resolve(stateProviders)) {
+        try {
+          fs.mkdirSync(stateDir, { recursive: true });
+          fs.writeFileSync(stateProviders, fileContent);
+        } catch {}
+      }
+    }
 
     restoredFiles.push({
       path: entryPath,
@@ -313,7 +409,7 @@ function unpackTarGz(archiveBuffer, targetWorkspaceDir) {
 /**
  * Restores a brain archive into the workspace
  */
-function restoreBrainArchive(archivePath, targetWorkspaceDir) {
+function restoreBrainArchive(archivePath, targetWorkspaceDir, options = {}) {
   const absArchivePath = path.resolve(archivePath);
   if (!fs.existsSync(absArchivePath)) {
     throw new Error(`Brain archive not found: ${absArchivePath}`);
@@ -323,7 +419,7 @@ function restoreBrainArchive(archivePath, targetWorkspaceDir) {
   const targetDir = path.resolve(targetWorkspaceDir);
   fs.mkdirSync(targetDir, { recursive: true });
 
-  const restored = unpackTarGz(archiveBuffer, targetDir);
+  const restored = unpackTarGz(archiveBuffer, targetDir, options);
 
   let manifest = null;
   const manifestPath = path.join(targetDir, "manifest.json");
@@ -417,9 +513,10 @@ function inspectBrainArchive(archivePath) {
 /**
  * Returns current brain status & inventory
  */
-function getBrainStatus(workspaceDir) {
+function getBrainStatus(workspaceDir, options = {}) {
   const ws = path.resolve(workspaceDir);
-  const entries = collectWorkspaceFiles(ws);
+  const stateDir = resolveEffectiveStateDir(ws, options);
+  const entries = collectWorkspaceFiles(ws, stateDir);
 
   const filesOnly = entries.filter((e) => !e.isDir);
   const totalBytes = filesOnly.reduce((acc, f) => {

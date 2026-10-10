@@ -11,6 +11,8 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 
+import { resolveStateDir } from "@/lib/hermes/paths";
+
 export const runtime = "nodejs";
 
 const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
@@ -26,7 +28,7 @@ const MIME_BY_EXT: Record<string, string> = {
 const expandTildeLocal = (value: string): string => {
   const trimmed = value.trim();
   if (trimmed === "~") return os.homedir();
-  if (trimmed.startsWith("~/")) return path.join(os.homedir(), trimmed.slice(2));
+  if (trimmed.startsWith("~/") || trimmed.startsWith("~\\")) return path.join(os.homedir(), trimmed.slice(2));
   return trimmed;
 };
 
@@ -53,7 +55,7 @@ const resolveAndValidateLocalMediaPath = (raw: string): { resolved: string; mime
 
   const resolved = path.resolve(expanded);
 
-  const allowedRoot = path.join(os.homedir(), ".hermes");
+  const allowedRoot = path.resolve(resolveStateDir());
   const allowedPrefix = `${allowedRoot}${path.sep}`;
   if (!(resolved === allowedRoot || resolved.startsWith(allowedPrefix))) {
     throw new Error(`Refusing to read media outside ${allowedRoot}`);
@@ -189,7 +191,7 @@ export async function GET(request: Request) {
 
     if (!sshTarget) {
       const { resolved, mime } = resolveAndValidateLocalMediaPath(rawPath);
-      const allowedRoot = path.join(os.homedir(), ".hermes");
+      const allowedRoot = path.resolve(resolveStateDir());
       const { bytes, size } = await readLocalMedia(resolved, allowedRoot);
       const body = new Blob([Uint8Array.from(bytes)], { type: mime });
       return new Response(body, {
