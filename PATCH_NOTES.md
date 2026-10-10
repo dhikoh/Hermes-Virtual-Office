@@ -1,5 +1,13 @@
 # Hermes3D Patch Notes
 
+## Patch v1.0.13 - Agent Roster Persistence
+- **Bug Fix (Sub-agents lost on restart)**: `agentRegistry` lived only in memory. Spawned, configured, and dismissed agents were not written to disk, so after a server restart the chat history remained while the agents were gone. Roster now persists to `~/.hermes/hermes3d-agents.json` on every spawn, configure, dismiss, `agents.create`, `agents.update`, and `agents.delete`, and is loaded at startup before history.
+- **Persistence Safety**: Writes are debounced (500ms) and flushed synchronously on `SIGINT`, `SIGTERM`, and `exit`, so the last change is not lost. A corrupt agents file logs a warning and does not crash the adapter.
+- **Single Source of History**: Removed the `/tmp`, `D:/tmp`, and cwd fallback copies of `hermes3d-history.json`. Only `~/.hermes/hermes3d-history.json` is read or written.
+- **Workspace Creation**: `spawn_agent` and `agents.create` now create the agent workspace folder.
+- **Verification**: `tests/unit/agentRegistryPersistence.test.ts` (round-trip and corrupt file) and `tests/e2e-adapter-persistence.mjs` (real WebSocket: create, kill, restart, `agents.list`, delete). Run with `npm run test:e2e-adapter`. The E2E test fails against the previous code.
+- **Known Limits**: History merge still prefers the longer array rather than newest timestamp. Writes are not atomic (no tmp and rename).
+
 ## Patch v1.0.12 - Security Hardening, Audit Remediation & Engine Deduplication
 - **Security Hardening (Multi-User Auth Blocker - S1)**: Upgraded `server/access-gate.js` with `required` mode support. In multi-user deployment (`MULTI_USER=true`), missing or empty tokens are strictly rejected instead of bypassing access checks. `server/index.js` now verifies credentials on startup in multi-user mode.
 - **Security Hardening (Remote SSH Command Injection - S2)**: Implemented strict POSIX shell argument escaping via `escapePosixShellArg` in `src/lib/ssh/gateway-host.ts`. Safely quotes metacharacters (`;`, `&`, `|`, `$()`, quotes, and spaces) before passing `argv` to OpenSSH, blocking command injection in remote agent operations, media reads, and skill removals.

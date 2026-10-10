@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e-adapter": "node tests/e2e-adapter-persistence.mjs",
     "e2e": "playwright test",
     "brain:export": "node scripts/brain-export.mjs",
     "brain:import": "node scripts/brain-import.mjs"
