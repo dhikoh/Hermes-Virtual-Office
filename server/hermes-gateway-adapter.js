@@ -450,9 +450,104 @@ function saveHistoryToDisk() {
 const AGENTS_FILE = path.join(STATE_DIR, "hermes3d-agents.json");
 let persistAgentsTimer = null;
 
+
+function slugify(name) {
+  const raw = typeof name === "string" ? name.trim().toLowerCase() : "";
+  const cleaned = raw.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return cleaned || "agent";
+}
+
+function broadcastPresence() {
+  broadcastEvent({
+    type: "event",
+    event: "presence",
+    payload: {
+      sessions: {
+        recent: [],
+        byAgent: [...agentRegistry.keys()].map((aid) => ({
+          agentId: aid,
+          recent: [],
+        })),
+      },
+    },
+  });
+}
+
+function createAgentEntry({ name, role = "", capability, instructions = "", boundaries = "", settings = {}, workspace, id }) {
+  const safeName = (typeof name === "string" && name.trim()) ? name.trim() : "Agent";
+  const slug = slugify(safeName);
+  const newId = id || `${slug}-${randomId().slice(0, 6)}`;
+
+  let resolvedCap = typeof capability === "string" ? capability.toLowerCase().trim() : "";
+  if (resolvedCap === "pm") resolvedCap = "";
+  if (!["developer", "researcher", "qa", "writer"].includes(resolvedCap)) {
+    const rawRole = (typeof role === "string" ? role : "").toLowerCase().trim();
+    if (["developer", "researcher", "qa", "writer"].includes(rawRole)) {
+      resolvedCap = rawRole;
+    } else {
+      resolvedCap = "developer";
+    }
+  }
+
+  const model = typeof settings.model === "string" && settings.model.trim() ? settings.model.trim() : HERMES_MODEL;
+  const wipe = Boolean(settings.wipe);
+  const continuity = settings.continuity !== false;
+  const bound = typeof boundaries === "string" ? boundaries.trim() : (typeof settings.boundaries === "string" ? settings.boundaries.trim() : "");
+
+  let systemPrompt = instructions ? instructions.trim() : `You are ${safeName}, a ${role || resolvedCap} agent.`;
+  if (bound) systemPrompt += `\n\nBoundaries: ${bound}`;
+
+  // Workspace path validation (DECISION D2)
+  let agentWorkspace = workspace;
+  if (!agentWorkspace || typeof agentWorkspace !== "string" || agentWorkspace.includes("..") || /^[\/\\]$|^[a-zA-Z]:[\/\\]?$/.test(agentWorkspace.trim())) {
+    agentWorkspace = path.join(STATE_DIR, `workspace-${newId}`);
+  }
+
+  return {
+    id: newId,
+    name: safeName,
+    workspace: agentWorkspace,
+    role: role || resolvedCap,
+    capability: resolvedCap,
+    systemPrompt,
+    settings: { wipe, continuity, model, boundaries: bound || undefined },
+  };
+}
+
 function writeAgentsFile() {
-  const data = [...agentRegistry.values()].filter((a) => a.id !== AGENT_ID);
-  writeFileAtomic(AGENTS_FILE, JSON.stringify(data, null, 2));
+  const mainAgent = agentRegistry.get(AGENT_ID);
+  const main = mainAgent ? {
+    name: mainAgent.name,
+    settings: {
+      model: mainAgent.settings?.model || HERMES_MODEL,
+      wipe: Boolean(mainAgent.settings?.wipe),
+      continuity: mainAgent.settings?.continuity !== false,
+      boundaries: mainAgent.settings?.boundaries || "",
+    },
+  } : {
+    name: HERMES_AGENT_NAME,
+    settings: { model: HERMES_MODEL, wipe: false, continuity: true },
+  };
+
+  const agents = [...agentRegistry.values()]
+    .filter((a) => a.id !== AGENT_ID)
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      role: a.role || a.capability || "specialist",
+      capability: a.capability || "developer",
+      workspace: a.workspace,
+      systemPrompt: a.systemPrompt,
+      settings: a.settings || {},
+    }));
+
+  const payload = {
+    version: 2,
+    main,
+    agents,
+  };
+
+  writeFileAtomic(AGENTS_FILE, JSON.stringify(payload, null, 2));
 }
 
 function saveAgentsToDisk() {
@@ -468,16 +563,53 @@ function saveAgentsToDisk() {
 function loadAgentsFromDisk() {
   if (!fs.existsSync(AGENTS_FILE)) return;
   try {
-    const list = JSON.parse(fs.readFileSync(AGENTS_FILE, "utf8"));
-    if (!Array.isArray(list)) throw new Error("agents file is not a JSON array");
-    for (const a of list) {
+    const raw = JSON.parse(fs.readFileSync(AGENTS_FILE, "utf8"));
+    let agentList = [];
+
+    if (Array.isArray(raw)) {
+      // Legacy v1 schema: simple array
+      agentList = raw;
+    } else if (raw && typeof raw === "object") {
+      // Roster v2 schema
+      if (raw.main && typeof raw.main === "object") {
+        const main = agentRegistry.get(AGENT_ID);
+        if (main) {
+          if (typeof raw.main.name === "string" && raw.main.name.trim()) {
+            main.name = raw.main.name.trim();
+          }
+          if (raw.main.settings && typeof raw.main.settings === "object") {
+            main.settings = { ...main.settings, ...raw.main.settings };
+          }
+        }
+      }
+      if (Array.isArray(raw.agents)) {
+        agentList = raw.agents;
+      }
+    } else {
+      throw new Error("agents file is not valid JSON array or v2 object");
+    }
+
+    for (const a of agentList) {
       if (!a || typeof a.id !== "string" || !a.id || a.id === AGENT_ID || typeof a.name !== "string") continue;
       const s = a.settings && typeof a.settings === "object" ? a.settings : {};
+      const role = typeof a.role === "string" ? a.role : "";
+      let capability = typeof a.capability === "string" ? a.capability.toLowerCase().trim() : "";
+      if (capability === "pm") capability = "";
+      if (!["developer", "researcher", "qa", "writer"].includes(capability)) {
+        const rawRole = role.toLowerCase();
+        if (["developer", "researcher", "qa", "writer"].includes(rawRole)) {
+          capability = rawRole;
+        } else {
+          capability = "developer";
+        }
+      }
+
       agentRegistry.set(a.id, {
         id: a.id,
         name: a.name,
         workspace: typeof a.workspace === "string" ? a.workspace : path.join(STATE_DIR, `workspace-${a.id}`),
-        role: typeof a.role === "string" ? a.role : "",
+        role: role || capability,
+        capability,
         systemPrompt: typeof a.systemPrompt === "string" ? a.systemPrompt : `You are ${a.name}.`,
         settings: {
           wipe: Boolean(s.wipe),
@@ -883,48 +1015,31 @@ function broadcastEvent(frame) {
 // ---------------------------------------------------------------------------
 
 async function execSpawnAgent(args) {
-  const name = (typeof args.name === "string" ? args.name : "Agent").trim() || "Agent";
-  const role = (typeof args.role === "string" ? args.role : "").trim();
   let requestedCap = typeof args.capability === "string" ? args.capability.toLowerCase().trim() : "";
   if (requestedCap === "pm") {
     return JSON.stringify({ ok: false, error: "Cannot spawn orchestrator (pm capability is reserved for main agent)." });
   }
-  if (!["developer", "researcher", "qa", "writer"].includes(requestedCap)) {
-    const rawRole = role.toLowerCase();
-    if (["developer", "researcher", "qa", "writer"].includes(rawRole)) {
-      requestedCap = rawRole;
-    } else {
-      requestedCap = "developer";
-    }
-  }
 
-  const instructions = typeof args.instructions === "string" ? args.instructions.trim() : "";
-  const boundaries = typeof args.boundaries === "string" ? args.boundaries.trim() : "";
-  const model = typeof args.model === "string" && args.model.trim() ? args.model.trim() : HERMES_MODEL;
-  const wipe = Boolean(args.wipe);
-  const continuity = args.continuity !== false;
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const newId = `${slug}-${randomId().slice(0, 6)}`;
-
-  let systemPrompt = instructions || `You are ${name}, a ${role || requestedCap} agent.`;
-  if (boundaries) systemPrompt += `\n\nBoundaries: ${boundaries}`;
-
-  const agentWorkspace = path.join(STATE_DIR, `workspace-${newId}`);
-  agentRegistry.set(newId, {
-    id: newId,
-    name,
-    workspace: agentWorkspace,
-    role: role || requestedCap,
-    capability: requestedCap,
-    systemPrompt,
-    settings: { wipe, continuity, model, boundaries },
+  const entry = createAgentEntry({
+    name: args.name,
+    role: args.role,
+    capability: args.capability,
+    instructions: args.instructions,
+    boundaries: args.boundaries,
+    settings: {
+      wipe: Boolean(args.wipe),
+      continuity: args.continuity !== false,
+      model: typeof args.model === "string" && args.model.trim() ? args.model.trim() : HERMES_MODEL,
+    },
   });
-  fs.mkdirSync(agentWorkspace, { recursive: true });
+
+  agentRegistry.set(entry.id, entry);
+  fs.mkdirSync(entry.workspace, { recursive: true });
   saveAgentsToDisk();
 
-  console.log(`[hermes-adapter] Spawned agent '${name}' (${newId}) with capability '${requestedCap}'`);
-  broadcastTeamChange();
-  return JSON.stringify({ ok: true, agent_id: newId, name, capability: requestedCap });
+  console.log(`[hermes-adapter] Spawned agent '${entry.name}' (${entry.id}) with capability '${entry.capability}'`);
+  broadcastPresence();
+  return JSON.stringify({ ok: true, agent_id: entry.id, name: entry.name, capability: entry.capability });
 }
 async function execDelegateTask(args, sendEvent) {
   const targetId = typeof args.agent_id === "string" ? args.agent_id.trim() : "";
@@ -1411,34 +1526,22 @@ async function handleMethod(method, params, id, sendEvent) {
     }
 
     case "agents.create": {
-      const agentName = (typeof p.name === "string" && p.name.trim()) ? p.name.trim() : "Agent";
-      const slug = agentName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-      const newId = `${slug}-${randomId().slice(0, 6)}`;
-      const workspace = (typeof p.workspace === "string" && p.workspace)
-        ? p.workspace : path.join(STATE_DIR, `workspace-${newId}`);
-      const role = typeof p.role === "string" ? p.role.trim() : "";
-      let capability = typeof p.capability === "string" ? p.capability.toLowerCase().trim() : "";
-      if (capability === "pm") capability = "";
-      if (!["developer", "researcher", "qa", "writer"].includes(capability)) {
-        const rawRole = role.toLowerCase();
-        if (["developer", "researcher", "qa", "writer"].includes(rawRole)) {
-          capability = rawRole;
-        } else {
-          capability = "developer";
-        }
+      if (typeof p.workspace === "string" && (p.workspace.includes("..") || /^[\/\\]$|^[a-zA-Z]:[\/\\]?$/.test(p.workspace.trim()))) {
+        return resErr(id, "INVALID_ARGUMENT", "Invalid workspace path: traversal and system roots are forbidden.");
       }
-      agentRegistry.set(newId, {
-        id: newId, name: agentName, workspace,
-        role: role || capability,
-        capability,
-        systemPrompt: typeof p.systemPrompt === "string" ? p.systemPrompt : `You are ${agentName}.`,
-        settings: { wipe: false, continuity: true, model: HERMES_MODEL },
+      const entry = createAgentEntry({
+        name: p.name,
+        role: p.role,
+        capability: p.capability,
+        instructions: p.systemPrompt,
+        workspace: typeof p.workspace === "string" ? p.workspace : undefined,
       });
-      fs.mkdirSync(workspace, { recursive: true });
+      agentRegistry.set(entry.id, entry);
+      fs.mkdirSync(entry.workspace, { recursive: true });
       saveAgentsToDisk();
-      return resOk(id, { agentId: newId, name: agentName, workspace, capability });
+      broadcastPresence();
+      return resOk(id, { agentId: entry.id, name: entry.name, workspace: entry.workspace, capability: entry.capability });
     }
-
     case "agents.delete": {
       const delId = typeof p.agentId === "string" ? p.agentId : "";
       if (delId && delId !== AGENT_ID) {
@@ -1453,17 +1556,22 @@ async function handleMethod(method, params, id, sendEvent) {
       const updId = typeof p.agentId === "string" ? p.agentId : "";
       const existing = agentRegistry.get(updId);
       if (existing) {
+        if (typeof p.workspace === "string") {
+          if (p.workspace.includes("..") || /^[\/\\]$|^[a-zA-Z]:[\/\\]?$/.test(p.workspace.trim())) {
+            return resErr(id, "INVALID_ARGUMENT", "Invalid workspace path: traversal and system roots are forbidden.");
+          }
+          existing.workspace = p.workspace.trim();
+        }
         if (typeof p.name === "string" && p.name.trim()) existing.name = p.name.trim();
-        if (typeof p.workspace === "string" && p.workspace.trim()) existing.workspace = p.workspace.trim();
         if (typeof p.role === "string") existing.role = p.role.trim();
         if (typeof p.capability === "string" && p.capability !== "pm" && ["developer", "researcher", "qa", "writer"].includes(p.capability.toLowerCase())) {
           existing.capability = p.capability.toLowerCase();
         }
         saveAgentsToDisk();
+        broadcastPresence();
       }
       return resOk(id, { ok: true, removedBindings: 0 });
     }
-
     case "agents.files.get": {
       const key = `${p.agentId || AGENT_ID}/${p.name || ""}`;
       const content = agentFiles.get(key);
@@ -2289,4 +2397,7 @@ module.exports = {
   updateEnvFile,
   readProvidersData,
   writeProvidersData,
+  createAgentEntry,
+  slugify,
+  flushPersistence,
 };

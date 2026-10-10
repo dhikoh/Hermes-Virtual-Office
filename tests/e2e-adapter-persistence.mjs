@@ -82,6 +82,7 @@ proc.kill("SIGTERM");
 await new Promise((r) => proc.once("exit", r));
 
 const after = JSON.parse(fs.readFileSync(agentsFile, "utf8"));
-assert(!after.some((a) => a.id === agentId), "deleted agent removed from disk");
+const agentList = Array.isArray(after) ? after : (after.agents || []);
+assert(!agentList.some((a) => a.id === agentId), "deleted agent removed from disk");
 fs.rmSync(home, { recursive: true, force: true });
 console.log("\nALL E2E CHECKS PASSED");
