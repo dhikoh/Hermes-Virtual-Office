@@ -33,7 +33,7 @@ export const resolveUserPath = (
 };
 
 export const resolveStateDir = (
-  env: NodeJS.ProcessEnv = process.env,
+  env: Record<string, string | undefined> = process.env,
   homedir: () => string = os.homedir
 ): string => {
   const override = env.HERMES_STATE_DIR?.trim();
@@ -42,7 +42,7 @@ export const resolveStateDir = (
 };
 
 export const resolveConfigPathCandidates = (
-  env: NodeJS.ProcessEnv = process.env,
+  env: Record<string, string | undefined> = process.env,
   homedir: () => string = os.homedir
 ): string[] => {
   const explicit = env.HERMES_CONFIG_PATH?.trim();

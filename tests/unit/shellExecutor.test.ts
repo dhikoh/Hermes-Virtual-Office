@@ -1,11 +1,23 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { execSync } from "node:child_process";
+import { createRequire } from "node:module";
 
+const require = createRequire(import.meta.url);
 const {
   executeShellCommand,
   resolvePendingApproval,
   getPendingApprovals,
 } = require("../../server/execution/shell-executor");
 const { ROLES } = require("../../server/roles/role-matrix");
+
+let gitAvailable = false;
+try {
+  execSync("git --version", { stdio: "ignore" });
+  gitAvailable = true;
+} catch {}
 
 describe("Shell / CLI Executor Engine v2.3.1", () => {
   it("rejects shell execution for roles without shell privileges (e.g. Researcher)", async () => {
@@ -20,10 +32,16 @@ describe("Shell / CLI Executor Engine v2.3.1", () => {
     expect(res.stderr).toContain("Blocked by Security Gate");
   });
 
-  it("runs safe read-only commands (YELLOW) without requiring approval", async () => {
-    const res = await executeShellCommand("dev-1", ROLES.DEVELOPER, "git status");
-    expect(res.ok).toBe(true);
-    expect(res.status).not.toBe("pending_approval");
+  it.skipIf(!gitAvailable)("runs safe read-only commands (YELLOW) without requiring approval in hermetic git repo (WP8)", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "shell-git-test-"));
+    try {
+      execSync("git init", { cwd: tempDir, stdio: "ignore" });
+      const res = await executeShellCommand("dev-1", ROLES.DEVELOPER, "git status", tempDir);
+      expect(res.ok).toBe(true);
+      expect(res.status).not.toBe("pending_approval");
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("intercepts RED commands and generates a pending approval ticket", async () => {
@@ -32,9 +50,9 @@ describe("Shell / CLI Executor Engine v2.3.1", () => {
     expect(res.approvalId).toMatch(/^appr_/);
 
     const pendingList = getPendingApprovals();
-    const found = pendingList.find((p: any) => p.id === res.approvalId);
+    const found = pendingList.find((p: { id: string; command: string }) => p.id === res.approvalId);
     expect(found).toBeTruthy();
-    expect(found.command).toContain("Build done");
+    expect(found?.command).toContain("Build done");
   });
 
   it("executes the command once approved via resolvePendingApproval", async () => {
